@@ -1153,9 +1153,10 @@ function apiErrorMessage(status, msg) {
 }
 
 function showError(err) {
+  const msg = (err && err.message) ? err.message : '不知道出了什么问题';
   showSheet({
     title: '没能完成',
-    text: (err && err.message) ? err.message : '不知道出了什么问题',
+    text: msg,
     actions: [
       { label: '去设置看看', onClick: () => switchTab('set') },
       { label: '知道了', primary: true }
