@@ -2082,7 +2082,9 @@ async function generateLook(card, ta, btn) {
     });
     return;
   }
-  const imgs = (card.images || []).slice(0, 4);
+  const cardId = card.id;
+  const source = (book.cards || []).find(k => k.id === cardId) || card;
+  const imgs = (source.images || []).slice(0, 4);
   if (!imgs.length) { toast('这张卡还没有图,先加一张'); return; }
   busy = true;
   btn.disabled = true;
@@ -2096,11 +2098,34 @@ async function generateLook(card, ta, btn) {
         '不要写性格、故事和评论,不要分点,直接给一段连贯的话。'
     }];
     imgs.forEach(im => content.push({ type: 'image_url', image_url: { url: im.data } }));
-    const out = await callAPI([{ role: 'user', content: content }], { stream: false, maxTokens: 400 });
-    card.look = (out || '').trim();
-    ta.value = card.look;
-    saveBookSoon();
-    toast('外貌描述已生成,可以自己改');
+    const out = await callAPI([{ role: 'user', content: content }], {
+      stream: false,
+      maxTokens: 800,
+      thinking: 'off'
+    });
+    const text = (out || '').trim();
+    if (!text) {
+      showSheet({
+        title: '这次没读到内容',
+        text: '接口返回成功,但正文是空的。常见原因:图片太小或不清晰、模型没识别出人物,或者输出额度被思考过程占用了。\n\n换一张正脸或半身的清晰照片再试;设置里把「思考强度」改成「关闭」也更稳。',
+        actions: [{ label: '知道了', primary: true }]
+      });
+      return;
+    }
+    const target = (book.cards || []).find(k => k.id === cardId);
+    if (!target) { toast('这张卡好像已经被移除了'); return; }
+    target.look = text;
+    openCardId = target.id;
+    await saveBookNow();
+    renderCards();
+    const el = document.querySelector('#cardList details.card[data-id="' + target.id + '"]');
+    if (el) {
+      el.open = true;
+      const ta2 = el.querySelector('.look-box textarea');
+      if (ta2) ta2.value = text;
+      el.scrollIntoView({ block: 'center' });
+    }
+    toast('外貌描述已生成,已填进卡片,可以自己改');
   } catch (err) {
     showError(err);
   } finally {
