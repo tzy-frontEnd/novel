@@ -493,7 +493,8 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
     </div>
     <div class="field">
       <label for="targetWords">每次生成多少字</label>
-      <input id="targetWords" type="number" min="300" max="6000" step="100" inputmode="numeric">
+      <input id="targetWords" type="number" min="300" max="20000" step="100" inputmode="numeric">
+      <p class="note">这是给模型的篇幅参考,不是硬限制。一次写太长容易啰嗦、重复,建议 2000 到 4000;更长的用「接着写」分几次完成。</p>
     </div>
     <div class="field">
       <label for="maxTokens">单次回复上限</label>
@@ -502,6 +503,7 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
         <option value="4000">4000 tokens(约两千多字)</option>
         <option value="8192">8192 tokens(约五千字)</option>
         <option value="16384">16384 tokens(约一万字,适合长章)</option>
+        <option value="32768">32768 tokens(约两万字,适合超长章)</option>
       </select>
     </div>
     <details class="tip">
@@ -2092,7 +2094,7 @@ async function generate(fromScratch) {
     await callAPI(msgs, {
       stream: true,
       signal: abortCtrl.signal,
-      maxTokens: settings.maxTokens,
+      maxTokens: Math.min(200000, Math.max(settings.maxTokens, Math.ceil(settings.targetWords * 0.7) + 500)),
       onReason: r => {
         reasonChars += r.length;
         $('#btnWrite').textContent = '思考中… ' + fmt(reasonChars) + ' 字';
@@ -2200,7 +2202,7 @@ async function applyFix(issues) {
   setBusy(true, '修改中…');
   try {
     const need = Math.ceil(countWords(prevBody) * 1.1) + 400;
-    const maxTok = Math.min(8192, Math.max(settings.maxTokens, need));
+    const maxTok = Math.min(32768, Math.max(settings.maxTokens, need));
     const fixed = (await callAPI(attachImages(fixMessages(c, issues)), { stream: false, maxTokens: maxTok })).trim();
     if (!fixed) throw new Error('模型没有返回修改后的正文,可以再试一次。');
     c.body = fixed;
@@ -2953,7 +2955,7 @@ function bind() {
   });
   $('#targetWords').addEventListener('change', e => {
     const v = parseInt(e.target.value, 10);
-    settings.targetWords = isFinite(v) ? Math.min(6000, Math.max(300, v)) : 1200;
+    settings.targetWords = isFinite(v) ? Math.min(20000, Math.max(300, v)) : 1200;
     e.target.value = String(settings.targetWords);
     saveSettings();
   });
