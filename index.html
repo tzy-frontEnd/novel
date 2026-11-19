@@ -313,6 +313,7 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
     </div>
     <div class="actions actions-sub">
       <button id="btnQuickCard" class="btn btn-ghost btn-sm" type="button">+ 设定卡</button>
+      <button id="btnUndoGen" class="btn btn-ghost btn-sm" type="button" hidden>撤回上段</button>
     </div>
 
     <textarea id="chBody" class="manuscript" placeholder="点「落笔」,我按上面的要求写这一章。&#10;也可以先自己写几段,再让我接着续。" aria-label="正文"></textarea>
@@ -817,8 +818,10 @@ let tombstones = [];
 let syncBusy = false;
 let syncTimer = null;
 let openCardId = null;
+let globalRefs = [];
+let refTombstones = [];
 
-function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [] }; }
+function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [], gen: null }; }
 const CARD_TYPES = { character: '人物卡', world: '世界观', rule: '设定 / 规则', place: '地点 / 物品' };
 function blankPrefs() {
   return { person: '第三人称限知', para: '长短交错', dialog: '适中', detail: '适中', ending: '留悬念', avoid: '' };
@@ -863,6 +866,7 @@ function normalizeBook(b) {
       }))
     })) : [];
     out.refsInline = !!b.refsInline;
+    out.refIds = Array.isArray(b.refIds) ? b.refIds.filter(x => typeof x === 'string') : null;
     out.chapters = (Array.isArray(b.chapters) && b.chapters.length) ? b.chapters.map(c => ({
       id: (c && c.id) ? String(c.id) : uid('c'),
       title: (c && typeof c.title === 'string') ? c.title : '',
@@ -872,7 +876,11 @@ function normalizeBook(b) {
       history: (c && Array.isArray(c.history)) ? c.history.filter(h => h && typeof h.body === 'string').slice(0, 3).map(h => ({
         at: Number(h.at) || Date.now(),
         body: h.body
-      })) : []
+      })) : [],
+      gen: (c && c.gen && typeof c.gen.text === 'string' && c.gen.text) ? {
+        at: Number(c.gen.at) || Date.now(),
+        text: c.gen.text
+      } : null
     })) : [blankChapter()];
     const ci = parseInt(b.cur, 10);
     out.cur = Math.min(Math.max(0, isNaN(ci) ? 0 : ci), out.chapters.length - 1);
@@ -1191,16 +1199,14 @@ function buildSystemPrompt() {
   if (book.facts.trim()) parts.push('【必须遵守的事实】\n' + book.facts.trim());
   if (book.styleGuide.trim()) parts.push('【文风指南(学手法,不照抄)】\n' + book.styleGuide.trim().slice(0, 3000));
 
-  if (book.refsInline && book.refs.length) {
-    let budget = 6000;
-    const chunks = [];
-    for (const r of book.refs) {
-      if (budget <= 0) break;
-      const t = r.text.slice(0, Math.min(2500, budget));
-      if (t.trim()) chunks.push(t.trim());
-      budget -= t.length;
+  if (book.refsInline) {
+    const refs = selectedRefs();
+    if (refs.length) {
+      const useRefs = refs.slice(0, 3);
+      const share = Math.max(2000, Math.floor(6000 / useRefs.length));
+      const chunks = useRefs.map(r => excerptEven(r.text, share).trim()).filter(Boolean);
+      if (chunks.length) parts.push('【范本片段(散布于作品各处,只学手法,不许照抄句子)】\n' + chunks.join('\n\n'));
     }
-    if (chunks.length) parts.push('【范本片段(只学手法,不许照抄句子)】\n' + chunks.join('\n\n'));
   }
 
   const prev = book.chapters.slice(0, book.cur);
@@ -1356,6 +1362,7 @@ function renderWrite() {
   $('#chWords').textContent = fmt(countWords(c.body)) + ' 字';
   if (!busy) $('#btnWrite').textContent = writeLabel();
   $('#btnStop').hidden = !busy;
+  $('#btnUndoGen').hidden = !(c.gen && c.gen.text);
   $('#keyBanner').hidden = !!settings.apiKey.trim();
 
   const total = book.chapters.reduce((s, ch) => s + countWords(ch.body), 0);
@@ -1454,43 +1461,132 @@ function renderBible() {
   renderCards();
 }
 
+function selectedRefs() {
+  const ids = Array.isArray(book.refIds) ? book.refIds : null;
+  if (!ids) return globalRefs.slice();
+  return globalRefs.filter(r => ids.indexOf(r.id) >= 0);
+}
+
+function excerptEven(text, budget) {
+  const t = String(text || '');
+  if (t.length <= budget) return t;
+  const n = Math.max(2, Math.min(8, Math.floor(budget / 3000) || 2));
+  const size = Math.max(500, Math.floor(budget / n));
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const start = Math.round((t.length - size) * i / (n - 1));
+    parts.push(t.slice(Math.max(0, start), Math.max(0, start) + size));
+  }
+  return parts.join('\n……(略)……\n');
+}
+
+async function migrateRefsOnce() {
+  const done = await kvGet('refsMigrated');
+  if (done) return;
+  let changed = false;
+  for (const e of index) {
+    try {
+      const b = await loadBookById(e.id);
+      if (Array.isArray(b.refs) && b.refs.length) {
+        b.refs.forEach(r => {
+          if (!globalRefs.some(x => x.id === r.id)) {
+            globalRefs.push({ id: r.id, name: r.name || '未命名范本', text: r.text || '', updatedAt: Date.now() });
+          }
+          if (!Array.isArray(b.refIds)) b.refIds = [];
+          if (b.refIds.indexOf(r.id) < 0) b.refIds.push(r.id);
+        });
+        b.refs = [];
+        await kvSet('book:' + b.id, b);
+        changed = true;
+      }
+    } catch (e2) { /* 跳过坏档 */ }
+  }
+  if (changed) await kvSet('globalRefs', globalRefs);
+  await kvSet('refsMigrated', 1);
+}
+
 function renderRefs() {
   const wrap = $('#refList');
   wrap.innerHTML = '';
-  if (!book.refs.length) {
+  if (!globalRefs.length) {
     const p = document.createElement('p');
     p.className = 'note';
     p.style.margin = '6px 0 10px';
-    p.textContent = '还没有范本。支持 .txt 和 .md 文件。';
+    p.textContent = '范本库还是空的。支持 .txt 和 .md 文件,整本小说也可以传。';
     wrap.appendChild(p);
     return;
   }
-  book.refs.forEach(r => {
+  const sel = new Set(selectedRefs().map(r => r.id));
+  globalRefs.forEach(r => {
     const row = document.createElement('div');
     row.className = 'ref-row';
-    const main = document.createElement('div');
-    main.className = 'ref-main';
+
+    const left = document.createElement('label');
+    left.className = 'ref-main';
+    left.style.display = 'flex';
+    left.style.alignItems = 'center';
+    left.style.gap = '9px';
+    left.style.cursor = 'pointer';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = sel.has(r.id);
+    cb.style.width = '18px';
+    cb.style.height = '18px';
+    cb.style.flex = '0 0 auto';
+    cb.style.accentColor = 'var(--seal)';
+    cb.addEventListener('change', () => {
+      const cur = new Set(selectedRefs().map(x => x.id));
+      if (cb.checked) cur.add(r.id); else cur.delete(r.id);
+      book.refIds = Array.from(cur);
+      saveBookSoon();
+      renderRefs();
+    });
+
+    const txt = document.createElement('div');
+    txt.style.minWidth = '0';
     const n = document.createElement('div');
     n.className = 'rf-name';
     n.textContent = r.name;
     const m = document.createElement('div');
     m.className = 'rf-meta';
     m.textContent = fmt(countWords(r.text)) + ' 字';
-    main.appendChild(n);
-    main.appendChild(m);
+    txt.appendChild(n);
+    txt.appendChild(m);
+    txt.addEventListener('click', ev => {
+      ev.preventDefault();
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+    });
+    left.appendChild(cb);
+    left.appendChild(txt);
+
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'btn btn-text danger btn-sm';
     del.textContent = '删除';
-    del.addEventListener('click', () => {
-      book.refs = book.refs.filter(x => x.id !== r.id);
+    del.addEventListener('click', async () => {
+      const ok = await confirmSheet('从范本库删除?', '《' + r.name + '》会从所有书里移除,已经生成的文风指南不受影响。');
+      if (!ok) return;
+      globalRefs = globalRefs.filter(x => x.id !== r.id);
+      refTombstones.push({ id: r.id, at: Date.now() });
+      refTombstones = refTombstones.slice(-300);
+      if (Array.isArray(book.refIds)) book.refIds = book.refIds.filter(x => x !== r.id);
+      await kvSet('globalRefs', globalRefs);
+      await kvSet('refTombstones', refTombstones);
       saveBookSoon();
       renderRefs();
     });
-    row.appendChild(main);
+    row.appendChild(left);
     row.appendChild(del);
     wrap.appendChild(row);
   });
+
+  const summary = document.createElement('p');
+  summary.className = 'note';
+  summary.style.margin = '8px 0 0';
+  summary.textContent = '本书使用 ' + sel.size + ' / ' + globalRefs.length + ' 份。范本库是全局的,其他书也能勾选。';
+  wrap.appendChild(summary);
 }
 
 function renderCards() {
@@ -2087,6 +2183,7 @@ async function generate(fromScratch) {
   }
   const msgs = attachImages(writeMessages(c));
   let acc = c.body;
+  const startLen = acc.length;
   let reasonChars = 0;
   setBusy(true, '运笔中…');
   abortCtrl = new AbortController();
@@ -2108,12 +2205,14 @@ async function generate(fromScratch) {
       }
     });
     c.body = acc;
+    if (acc.length > startLen) c.gen = { at: Date.now(), text: acc.slice(startLen) };
     await saveBookNow();
     renderTop();
     toast(fromScratch && acc.trim() ? '这一章写好了' : '这一段写好了');
     scheduleSync(30000);
   } catch (err) {
     c.body = acc;
+    if (acc.length > startLen) c.gen = { at: Date.now(), text: acc.slice(startLen) };
     await saveBookNow();
     renderTop();
     if (err && err.name === 'AbortError') toast('已停下,写好的部分保留');
@@ -2124,6 +2223,46 @@ async function generate(fromScratch) {
     $('#chWords').textContent = fmt(countWords(curChapter().body)) + ' 字';
     autosizeBody();
   }
+}
+
+async function undoGenerate() {
+  if (busy) return;
+  const c = curChapter();
+  if (!c.gen || !c.gen.text) { toast('没有可撤回的生成内容'); return; }
+  if (!c.body.endsWith(c.gen.text)) {
+    showSheet({
+      title: '这段接不上原样了',
+      text: '生成之后正文又被改过,直接截掉可能会误删你写的东西。可以到「历史版本」里恢复生成前的版本。',
+      actions: [
+        {
+          label: '去历史版本', primary: true, onClick: () => {
+            const hb = $('#historyBox');
+            if (hb) {
+              hb.hidden = false;
+              hb.open = true;
+              hb.scrollIntoView({ block: 'center' });
+            }
+          }
+        },
+        { label: '知道了' }
+      ]
+    });
+    return;
+  }
+  const ok = await confirmSheet('撤回上一次生成?', '只删掉刚才生成的那一段,你自己写的文字保留;撤错了还能在「历史版本」里找回。');
+  if (!ok) return;
+  pushHistory(c);
+  c.body = c.body.slice(0, c.body.length - c.gen.text.length).replace(/\s+$/, '');
+  c.gen = null;
+  $('#chBody').value = c.body;
+  $('#chWords').textContent = fmt(countWords(c.body)) + ' 字';
+  await saveBookNow();
+  renderTop();
+  renderHistory();
+  autosizeBody();
+  $('#btnUndoGen').hidden = true;
+  $('#btnWrite').textContent = writeLabel();
+  toast('已撤回上段');
 }
 
 async function summarize() {
@@ -2206,6 +2345,7 @@ async function applyFix(issues) {
     const fixed = (await callAPI(attachImages(fixMessages(c, issues)), { stream: false, maxTokens: maxTok })).trim();
     if (!fixed) throw new Error('模型没有返回修改后的正文,可以再试一次。');
     c.body = fixed;
+    c.gen = null;
     $('#chBody').value = fixed;
     $('#chWords').textContent = fmt(countWords(fixed)) + ' 字';
     await saveBookNow();
@@ -2349,9 +2489,10 @@ async function duplicateBook(entry) {
   copy.updatedAt = Date.now();
   copy.chapters = copy.chapters.map(c => ({
     id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req,
-    history: Array.isArray(c.history) ? c.history : []
+    history: Array.isArray(c.history) ? c.history : [],
+    gen: c.gen || null
   }));
-  copy.refs = copy.refs.map(r => ({ id: uid('r'), name: r.name, text: r.text }));
+  copy.refs = [];
   copy.cards = (copy.cards || []).map(k => ({
     id: uid('k'), type: k.type, name: k.name, text: k.text, look: k.look || '',
     images: (k.images || []).map(im => ({ id: uid('i'), name: im.name, data: im.data }))
@@ -2416,40 +2557,44 @@ async function addRefs(fileList) {
     try {
       const text = await readFileText(f);
       if (!text.trim()) { skipped++; continue; }
-      const cut = text.length > 120000 ? text.slice(0, 120000) : text;
-      book.refs.push({ id: uid('r'), name: f.name.replace(/\.[^.]+$/, ''), text: cut });
+      const cut = text.length > 2000000 ? text.slice(0, 2000000) : text;
+      const rid = uid('r');
+      globalRefs.push({ id: rid, name: f.name.replace(/\.[^.]+$/, ''), text: cut, updatedAt: Date.now() });
+      if (Array.isArray(book.refIds) && book.refIds.indexOf(rid) < 0) book.refIds.push(rid);
       added++;
     } catch (e) { skipped++; }
   }
-  if (added) { saveBookSoon(); renderRefs(); }
+  if (added) {
+    await kvSet('globalRefs', globalRefs);
+    saveBookSoon();
+    renderRefs();
+  }
   toast(added
-    ? '加入 ' + added + ' 份范本' + (skipped ? ',有 ' + skipped + ' 份没读成' : '')
+    ? '加入范本库 ' + added + ' 份' + (skipped ? ',有 ' + skipped + ' 份没读成' : '')
     : '没读成,换成 .txt 或 .md 再试');
 }
 
 async function extractStyle() {
   if (busy) return;
   if (!requireKey()) return;
-  if (!book.refs.length) { toast('先上传一份范本'); return; }
-  let budget = 24000;
-  const chunks = [];
-  for (const r of book.refs) {
-    if (budget <= 0) break;
-    const t = r.text.slice(0, Math.min(7000, budget));
-    if (t.trim()) chunks.push('《' + r.name + '》节选:\n' + t.trim());
-    budget -= t.length;
-  }
+  const refs = selectedRefs();
+  if (!refs.length) { toast('先在范本库里勾选至少一份'); return; }
+  const useRefs = refs.slice(0, 6);
+  const share = Math.max(3000, Math.floor(30000 / useRefs.length));
+  const chunks = useRefs.map(r =>
+    '《' + r.name + '》节选(从作品的不同位置抽取,前后加在一起看):\n' + excerptEven(r.text, share).trim()
+  );
   setBusy(true, '提炼中…');
   try {
     const out = await callAPI([
       { role: 'system', content: '你是一位小说写作教师,擅长拆解文本的写法。只输出分析结果,不要客套。' },
       {
         role: 'user',
-        content: '下面是作者提供的范本片段。请提炼出可以直接照着执行的写作手法,供之后写小说时模仿(学手法,不抄句子):\n' +
+        content: '下面是作者提供的范本,较长的作品已从开头、中段、结尾等多个位置取样。请综合这些片段,提炼出可以直接照着执行的写作手法,供之后写小说时模仿(学手法,不抄句子):\n' +
           '1) 叙述视角与叙述距离\n2) 句子长短与节奏\n3) 描写和细节的处理方式\n4) 对话的写法与功能\n5) 常用的结构技巧与转场\n6) 用词偏好与应避免的写法\n\n' +
-          '每条写具体、可操作,总数控制在 800 字以内。\n\n' + chunks.join('\n\n')
+          '每条写具体、可操作,总数控制在 900 字以内。\n\n' + chunks.join('\n\n')
       }
-    ], { stream: false, maxTokens: 1200 });
+    ], { stream: false, maxTokens: 1500 });
     book.styleGuide = (out || '').trim();
     $('#styleGuide').value = book.styleGuide;
     await saveBookNow();
@@ -2564,12 +2709,31 @@ function mergePayloads(local, remote) {
     const at = del.get(b.id);
     return !(at && at >= (Number(b.updatedAt) || 0));
   });
+
+  const refMap = new Map();
+  (local.refs || []).forEach(r => { if (r && r.id) refMap.set(r.id, r); });
+  (remote.refs || []).forEach(r => {
+    if (!r || !r.id) return;
+    const lr = refMap.get(r.id);
+    if (!lr || (Number(r.updatedAt) || 0) > (Number(lr.updatedAt) || 0)) refMap.set(r.id, r);
+  });
+  const delRef = new Map();
+  (local.deletedRefs || []).concat(remote.deletedRefs || []).forEach(d => {
+    if (d && d.id) delRef.set(d.id, Math.max(delRef.get(d.id) || 0, Number(d.at) || 0));
+  });
+  const refs = Array.from(refMap.values()).filter(r => {
+    const at = delRef.get(r.id);
+    return !(at && at >= (Number(r.updatedAt) || 0));
+  });
+
   return {
     app: 'novel-writer',
     version: 2,
     exportedAt: new Date().toISOString(),
     books: books,
-    deleted: Array.from(del.entries()).map(pair => ({ id: pair[0], at: pair[1] })).slice(-300)
+    refs: refs,
+    deleted: Array.from(del.entries()).map(pair => ({ id: pair[0], at: pair[1] })).slice(-300),
+    deletedRefs: Array.from(delRef.entries()).map(pair => ({ id: pair[0], at: pair[1] })).slice(-300)
   };
 }
 async function applyPayload(p) {
@@ -2585,6 +2749,19 @@ async function applyPayload(p) {
   for (const b of list) await kvSet('book:' + b.id, b);
   tombstones = Array.isArray(p.deleted) ? p.deleted.slice(-300) : [];
   await kvSet('tombstones', tombstones);
+  if (Array.isArray(p.refs)) {
+    globalRefs = p.refs.filter(r => r && typeof r.text === 'string' && r.id).map(r => ({
+      id: r.id,
+      name: typeof r.name === 'string' ? r.name : '未命名范本',
+      text: r.text,
+      updatedAt: Number(r.updatedAt) || Date.now()
+    }));
+    await kvSet('globalRefs', globalRefs);
+  }
+  if (Array.isArray(p.deletedRefs)) {
+    refTombstones = p.deletedRefs.slice(-300);
+    await kvSet('refTombstones', refTombstones);
+  }
   index = list.map(b => ({
     id: b.id,
     title: b.title || '',
@@ -2613,7 +2790,9 @@ async function buildSyncPayload() {
     version: 2,
     exportedAt: new Date().toISOString(),
     books: books,
-    deleted: tombstones.slice(-300)
+    refs: globalRefs,
+    deleted: tombstones.slice(-300),
+    deletedRefs: refTombstones.slice(-300)
   };
 }
 async function syncNow(silent) {
@@ -2744,7 +2923,10 @@ async function exportAll() {
   for (const e of index) {
     try { books.push(await loadBookById(e.id)); } catch (err) { /* 跳过坏档 */ }
   }
-  const payload = { app: 'novel-writer', version: 2, exportedAt: new Date().toISOString(), books: books };
+  const payload = {
+    app: 'novel-writer', version: 2, exportedAt: new Date().toISOString(),
+    books: books, refs: globalRefs, deletedRefs: refTombstones
+  };
   download('小说备份-' + dateStamp() + '.json', JSON.stringify(payload), 'application/json');
   settings.lastBackup = Date.now();
   saveSettings();
@@ -2772,6 +2954,19 @@ function importBackupFile(file) {
       showSheet({ title: '读不出来', text: '备份里没有找到作品。', actions: [{ label: '知道了', primary: true }] });
       return;
     }
+    if (data && Array.isArray(data.refs)) {
+      data.refs.forEach(r => {
+        if (r && typeof r.text === 'string') {
+          const exists = r.id && globalRefs.some(x => x.id === r.id);
+          globalRefs.push({
+            id: exists ? uid('r') : (r.id || uid('r')),
+            name: typeof r.name === 'string' ? r.name : '导入的范本',
+            text: r.text,
+            updatedAt: Number(r.updatedAt) || Date.now()
+          });
+        }
+      });
+    }
     const ok = await confirmSheet('导入 ' + list.length + ' 本书?', '会作为新书加进书架,不会覆盖现在的内容。');
     if (!ok) return;
     let n = 0;
@@ -2780,8 +2975,16 @@ function importBackupFile(file) {
         const nb = normalizeBook(raw);
         nb.id = uid('b');
         nb.title = nb.title || '导入的作品';
-        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req, history: Array.isArray(c.history) ? c.history : [] }));
-        nb.refs = nb.refs.map(r => ({ id: uid('r'), name: r.name, text: r.text }));
+        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req, history: Array.isArray(c.history) ? c.history : [], gen: c.gen || null }));
+        if (Array.isArray(nb.refs) && nb.refs.length) {
+          if (!Array.isArray(nb.refIds)) nb.refIds = [];
+          nb.refs.forEach(r => {
+            const rid = uid('r');
+            globalRefs.push({ id: rid, name: r.name || '导出的范本', text: r.text || '', updatedAt: Date.now() });
+            nb.refIds.push(rid);
+          });
+        }
+        nb.refs = [];
         nb.cards = nb.cards.map(k => ({
           id: uid('k'), type: k.type, name: k.name, text: k.text, look: k.look || '',
           images: (k.images || []).map(im => ({ id: uid('i'), name: im.name, data: im.data }))
@@ -2797,7 +3000,9 @@ function importBackupFile(file) {
       } catch (e) { /* 跳过坏档 */ }
     }
     await kvSet('index', index);
+    await kvSet('globalRefs', globalRefs);
     renderShelf();
+    renderRefs();
     toast('导入了 ' + n + ' 本书');
   };
   reader.readAsText(file, 'utf-8');
@@ -2854,6 +3059,7 @@ function bind() {
   });
 
   $('#btnWrite').addEventListener('click', () => generate(false));
+  $('#btnUndoGen').addEventListener('click', undoGenerate);
   $('#btnRewrite').addEventListener('click', async () => {
     if (busy) return;
     if (!curChapter().body.trim()) { generate(true); return; }
@@ -3018,6 +3224,10 @@ async function boot() {
     await loadSettings();
     tombstones = await kvGet('tombstones');
     if (!Array.isArray(tombstones)) tombstones = [];
+    globalRefs = await kvGet('globalRefs');
+    if (!Array.isArray(globalRefs)) globalRefs = [];
+    refTombstones = await kvGet('refTombstones');
+    if (!Array.isArray(refTombstones)) refTombstones = [];
     index = await loadIndex();
     const storedCur = await kvGet('curBook');
     bookId = (typeof storedCur === 'string' && index.some(x => x.id === storedCur))
@@ -3031,6 +3241,8 @@ async function boot() {
     } else {
       book = await loadBookById(bookId);
     }
+    await migrateRefsOnce();
+    book = await loadBookById(bookId);
     renderAll();
     bind();
     if (syncReady() && settings.autoSync) setTimeout(() => syncNow(true), 2000);
