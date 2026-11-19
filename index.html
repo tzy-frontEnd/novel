@@ -188,6 +188,27 @@ input[type=range]{background:transparent;border:0;padding:4px 0;accent-color:var
 .ref-main{min-width:0}
 .ref-main .rf-name{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ref-main .rf-meta{font-size:12px;color:var(--ink3);margin-top:2px}
+
+.card-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:18px 0 6px;font-size:13px;color:var(--ink2)}
+.card{border:1px solid var(--rule);border-radius:var(--radius);background:var(--sheet);padding:0 12px;margin:0 0 8px}
+.card summary{list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.card summary::-webkit-details-marker{display:none}
+.card .card-name{font-family:var(--serif);font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card[open] summary{border-bottom:1px solid var(--rule);margin-bottom:10px}
+.card input{margin:0 0 8px}
+.card textarea{margin:0 0 8px;font-family:var(--serif);font-size:16px;line-height:1.85}
+.card-actions{display:flex;justify-content:space-between;gap:8px;padding:0 0 10px;align-items:center}
+.card-actions select{width:auto;flex:1 1 auto;min-width:0;padding:8px 10px;font-size:13px}
+.card-imgs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.thumb{position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--rule);background:var(--sheet)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.thumb-del{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:0;background:rgba(32,38,36,.66);color:#fff;font-size:14px;line-height:1;padding:0;cursor:pointer}
+.thumb-add{width:72px;height:72px;border:1px dashed var(--rule);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2);cursor:pointer;background:var(--sheet)}
+#sheetField img{max-width:100%;max-height:52vh;display:block;margin:0 auto;border-radius:8px;border:1px solid var(--rule)}
+.actions-sub{margin-top:-4px}
+.look-box{margin:2px 0 10px}
+.look-box label{display:block;font-size:12px;color:var(--ink2);margin-bottom:6px}
+.look-box textarea{margin:0 0 8px;font-size:14px;line-height:1.7}
 .check{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink2);margin:0 0 14px;line-height:1.5}
 .check input{width:18px;height:18px;margin:1px 0 0;flex:0 0 auto;accent-color:var(--seal)}
 
@@ -290,12 +311,20 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
       <button id="btnRewrite" class="btn btn-text" type="button">重写</button>
       <button id="btnStop" class="btn btn-ghost" type="button" hidden>停止</button>
     </div>
+    <div class="actions actions-sub">
+      <button id="btnQuickCard" class="btn btn-ghost btn-sm" type="button">+ 设定卡</button>
+    </div>
 
     <textarea id="chBody" class="manuscript" placeholder="点「落笔」,我按上面的要求写这一章。&#10;也可以先自己写几段,再让我接着续。" aria-label="正文"></textarea>
 
     <details class="sum" style="margin-top:12px">
       <summary>本章摘要<span class="hint">给后面的章节当记忆</span></summary>
       <textarea id="chSummary" rows="5" placeholder="写完一章点「存摘要」,这里会存下本章梗概,写新章节时我会参考它。"></textarea>
+    </details>
+
+    <details class="sum" id="historyBox" style="margin-top:12px" hidden>
+      <summary>历史版本<span class="hint">重写或修正前自动存</span></summary>
+      <div id="historyList"></div>
     </details>
 
     <button id="btnDelCh" class="btn btn-text danger" type="button">删除本章</button>
@@ -394,6 +423,16 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
       <textarea id="bNotes" rows="5" placeholder="写到后面临时定下的细节记在这里,比如某把钥匙的来历。存摘要时会自动追加本章的新设定。"></textarea>
     </div>
 
+    <div class="section-title">卡片库</div>
+    <p class="note top">一张卡讲一件事,每次生成都会带上。人物卡写清年龄、外貌、性格、说话习惯、和谁是什么关系,还可以挂形象图(最多 8 张)。图传上来后点「按图生成外貌」,会把长相写成一小段文字存进卡片——以后每次写作只带这段文字,不用反复发图,省钱也更稳。上传 .txt / .md 时,用「## 名字」当小标题就会拆成多张卡;文件里再用「# 人物」「# 世界观」「# 设定」「# 地点」分段,会自动归到对应分类。写作途中想补,回「正文」点「+ 设定卡」即可。</p>
+    <div class="actions">
+      <label class="btn btn-ghost" style="display:inline-flex;align-items:center;cursor:pointer">
+        上传卡片文件
+        <input id="cardFile" type="file" accept=".txt,.md,.markdown,text/plain" multiple hidden>
+      </label>
+    </div>
+    <div id="cardList"></div>
+
     <div class="section-title">范本与文风</div>
     <p class="note top">把你喜欢的段落、自己的旧稿传上来,让模型学它的写法。建议用自己的稿子或已过版权期的作品;只学手法,不照抄句子。</p>
     <div class="actions">
@@ -424,14 +463,33 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
     <div class="field">
       <label for="model">模型</label>
       <select id="model">
-        <option value="deepseek-chat">deepseek-chat(快,适合日常写)</option>
-        <option value="deepseek-reasoner">deepseek-reasoner(更会想,慢一些)</option>
+        <option value="deepseek-flash">deepseek-flash(DeepSeek V4.1 Flash,快,推荐)</option>
+        <option value="deepseek-v4-pro">deepseek-v4-pro(DeepSeek V4 Pro,更强,也更慢更贵)</option>
       </select>
     </div>
     <div class="field">
+      <label for="thinking">思考强度</label>
+      <select id="thinking">
+        <option value="off">关闭(最快,适合日常写正文)</option>
+        <option value="low">低</option>
+        <option value="high">高</option>
+        <option value="max">最高(最稳,适合理大纲、查矛盾)</option>
+      </select>
+      <p class="note">开思考时,模型先在内心打草稿再写,更稳但更慢更费。日常写正文选「关闭」;点「检查一致」前切到「高」或「最高」更准。</p>
+    </div>
+    <div class="field">
+      <label for="modelCustom">其他模型名(可选)</label>
+      <input id="modelCustom" autocapitalize="off" spellcheck="false" placeholder="留空就用上面选的;换成别家接口时才填">
+    </div>
+    <p class="note" id="reqPreview"></p>
+    <label class="check">
+      <input id="sendImages" type="checkbox">
+      <span>生成时连原图一起发(平时靠卡片里的「外貌描述」就够;打开后每次最多 4 张、约 4 千 tokens,适合想核对形象的时候)</span>
+    </label>
+    <div class="field">
       <label for="temp">发挥程度 <span id="tempVal">1.2</span></label>
       <input id="temp" type="range" min="0.6" max="1.5" step="0.1">
-      <p class="note">低一些更稳、更像前文;高一些更放得开、也更容易跑偏。小说一般 1.1 到 1.3。</p>
+      <p class="note">低一些更稳、更像前文;高一些更放得开、也更容易跑偏,小说一般 1.1 到 1.3。注意:开了思考后 DeepSeek 会忽略这个参数,只有「思考关闭」时它才生效。</p>
     </div>
     <div class="field">
       <label for="targetWords">每次生成多少字</label>
@@ -443,6 +501,7 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
         <option value="2048">2048 tokens(约一千多字)</option>
         <option value="4000">4000 tokens(约两千多字)</option>
         <option value="8192">8192 tokens(约五千字)</option>
+        <option value="16384">16384 tokens(约一万字,适合长章)</option>
       </select>
     </div>
     <details class="tip">
@@ -451,6 +510,45 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
         <input id="baseUrl" autocapitalize="off" spellcheck="false">
         <p class="note" style="margin:8px 0 0">默认就是 DeepSeek 的地址。换成其他兼容 OpenAI 格式的接口时才动。</p>
       </div>
+    </details>
+
+    <div class="section-title">多设备同步(可选)</div>
+    <p class="note top">把进度同步到你自己的一个 <b>私有</b> GitHub 仓库里,手机和电脑打开同一个网址就能接着写,也能翻看之前写的所有章节。不配也照常能用,只是各设备各存各的。DeepSeek 的 Key 不参与同步,每台设备各填一次。</p>
+    <div class="grid2">
+      <div class="field">
+        <label for="ghUser">GitHub 用户名</label>
+        <input id="ghUser" autocapitalize="off" spellcheck="false" placeholder="tzy-frontEnd">
+      </div>
+      <div class="field">
+        <label for="ghRepo">私有仓库名</label>
+        <input id="ghRepo" autocapitalize="off" spellcheck="false" placeholder="novel-sync">
+      </div>
+      <div class="field">
+        <label for="ghBranch">分支</label>
+        <input id="ghBranch" autocapitalize="off" spellcheck="false" placeholder="main">
+      </div>
+      <div class="field">
+        <label>同步方式</label>
+        <label class="check" style="margin:0">
+          <input id="ghAuto" type="checkbox">
+          <span>自动同步</span>
+        </label>
+      </div>
+    </div>
+    <div class="field">
+      <label for="ghToken">Token(只存在这台设备)</label>
+      <input id="ghToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_...">
+    </div>
+    <div class="actions">
+      <button id="btnSyncNow" class="btn btn-ghost" type="button">立即同步</button>
+    </div>
+    <p class="note" id="syncInfo"></p>
+    <details class="tip">
+      <summary>怎么建私有仓库和 Token</summary>
+      <p>1. GitHub 右上角「+」→ New repository,名字填 <b>novel-sync</b>,选 <b>Private</b>,勾上 Add a README(这样就有 main 分支),Create repository。</p>
+      <p>2. 点头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token。Repository access 选 Only select repositories,只勾 novel-sync;Repository permissions 里把 <b>Contents</b> 设为 Read and write。生成后复制 github_pat_ 开头的那串。</p>
+      <p>3. 把用户名、仓库名、Token 填到上面,点「立即同步」。另一台设备打开同一个网址,填一样的信息再点一次同步,那边的书架就会落进同一份进度。</p>
+      <p>Token 相当于一把只开这一个私有仓库的钥匙,只存在设备本机;不用了回 GitHub 删掉即可。两台设备同时改同一本书时,以最后保存的那一份为准,所以换设备前先点一下同步。</p>
     </details>
 
     <div class="section-title">数据</div>
@@ -640,12 +738,21 @@ async function kvDel(k) {
 /* ================= 设置 ================= */
 const DEFAULT_SETTINGS = {
   apiKey: '',
-  model: 'deepseek-chat',
+  model: 'deepseek-flash',
+  modelCustom: '',
+  thinking: 'off',
+  sendImages: false,
   baseUrl: 'https://api.deepseek.com/chat/completions',
   temperature: 1.2,
   targetWords: 1200,
   maxTokens: 4000,
-  lastBackup: 0
+  lastBackup: 0,
+  ghUser: '',
+  ghRepo: '',
+  ghBranch: 'main',
+  ghToken: '',
+  autoSync: false,
+  lastSync: 0
 };
 let settings = Object.assign({}, DEFAULT_SETTINGS);
 
@@ -656,7 +763,7 @@ function migrateSettingsV1() {
     const old = JSON.parse(raw) || {};
     return {
       apiKey: typeof old.apiKey === 'string' ? old.apiKey : '',
-      model: typeof old.model === 'string' ? old.model : 'deepseek-chat',
+      model: typeof old.model === 'string' ? old.model : 'deepseek-flash',
       baseUrl: typeof old.baseUrl === 'string' ? old.baseUrl : DEFAULT_SETTINGS.baseUrl,
       temperature: Number(old.temperature) || 1.2,
       targetWords: Number(old.targetWords) || 1200,
@@ -680,6 +787,20 @@ async function loadSettings() {
   settings.targetWords = Number(settings.targetWords) || DEFAULT_SETTINGS.targetWords;
   settings.maxTokens = Number(settings.maxTokens) || DEFAULT_SETTINGS.maxTokens;
   settings.lastBackup = Number(settings.lastBackup) || 0;
+  ['ghUser', 'ghRepo', 'ghBranch', 'ghToken'].forEach(k => {
+    if (typeof settings[k] !== 'string') settings[k] = DEFAULT_SETTINGS[k];
+  });
+  settings.ghBranch = settings.ghBranch.trim() || 'main';
+  settings.autoSync = !!settings.autoSync;
+  settings.lastSync = Number(settings.lastSync) || 0;
+
+  // 旧的模型名已在 2026-07-24 停用,自动迁到新模型
+  if (settings.model === 'deepseek-chat' || settings.model === 'deepseek-reasoner') {
+    settings.model = 'deepseek-flash';
+  }
+  if (typeof settings.modelCustom !== 'string') settings.modelCustom = '';
+  if (['off', 'low', 'high', 'max'].indexOf(settings.thinking) < 0) settings.thinking = 'off';
+  if (typeof settings.sendImages !== 'boolean') settings.sendImages = false;
 }
 function saveSettings() { kvSet('settings', settings); }
 
@@ -690,8 +811,13 @@ let book = null;
 let busy = false;
 let abortCtrl = null;
 let saveTimer = null;
+let tombstones = [];
+let syncBusy = false;
+let syncTimer = null;
+let openCardId = null;
 
-function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '' }; }
+function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [] }; }
+const CARD_TYPES = { character: '人物卡', world: '世界观', rule: '设定 / 规则', place: '地点 / 物品' };
 function blankPrefs() {
   return { person: '第三人称限知', para: '长短交错', dialog: '适中', detail: '适中', ending: '留悬念', avoid: '' };
 }
@@ -701,7 +827,7 @@ function newBookObj(title) {
     title: title || '',
     genre: '', style: '', bible: '', facts: '', autoNotes: '',
     prefs: blankPrefs(),
-    styleGuide: '', refs: [], refsInline: false,
+    styleGuide: '', refs: [], refsInline: false, cards: [],
     chapters: [blankChapter()],
     cur: 0,
     createdAt: Date.now(),
@@ -722,13 +848,29 @@ function normalizeBook(b) {
       name: typeof r.name === 'string' ? r.name : '未命名范本',
       text: r.text
     })) : [];
+    out.cards = Array.isArray(b.cards) ? b.cards.filter(c => c && typeof c.text === 'string').map(c => ({
+      id: (c.id && typeof c.id === 'string') ? c.id : uid('k'),
+      type: CARD_TYPES[c.type] ? c.type : 'rule',
+      name: typeof c.name === 'string' ? c.name : '未命名卡片',
+      text: c.text,
+      look: typeof c.look === 'string' ? c.look : '',
+      images: (Array.isArray(c.images) ? c.images : []).filter(im => im && typeof im.data === 'string' && im.data.indexOf('data:image/') === 0).slice(0, 8).map(im => ({
+        id: (im.id && typeof im.id === 'string') ? im.id : uid('i'),
+        name: typeof im.name === 'string' ? im.name : '',
+        data: im.data
+      }))
+    })) : [];
     out.refsInline = !!b.refsInline;
     out.chapters = (Array.isArray(b.chapters) && b.chapters.length) ? b.chapters.map(c => ({
       id: (c && c.id) ? String(c.id) : uid('c'),
       title: (c && typeof c.title === 'string') ? c.title : '',
       body: (c && typeof c.body === 'string') ? c.body : '',
       summary: (c && typeof c.summary === 'string') ? c.summary : '',
-      req: (c && typeof c.req === 'string') ? c.req : ''
+      req: (c && typeof c.req === 'string') ? c.req : '',
+      history: (c && Array.isArray(c.history)) ? c.history.filter(h => h && typeof h.body === 'string').slice(0, 3).map(h => ({
+        at: Number(h.at) || Date.now(),
+        body: h.body
+      })) : []
     })) : [blankChapter()];
     const ci = parseInt(b.cur, 10);
     out.cur = Math.min(Math.max(0, isNaN(ci) ? 0 : ci), out.chapters.length - 1);
@@ -817,6 +959,12 @@ function showSheet(o) {
     inputEl.setAttribute('spellcheck', 'false');
     fieldBox.appendChild(inputEl);
     fieldBox.hidden = false;
+  } else if (opts.image) {
+    const img = document.createElement('img');
+    img.src = opts.image;
+    img.alt = opts.imageName || '图片';
+    fieldBox.appendChild(img);
+    fieldBox.hidden = false;
   } else {
     fieldBox.hidden = true;
   }
@@ -885,6 +1033,9 @@ function apiErrorMessage(status, msg) {
   if (status === 400 && /context|too long|maximum/i.test(m)) {
     return '带的前情太多了,超出模型长度。去「设定」里把早期摘要压短,或者开始新的一章。';
   }
+  if (status === 400 && /model/i.test(m)) {
+    return '模型名不对或已经下线。模型选 deepseek-flash;用别家接口时才在「其他模型名」里填它们的模型。';
+  }
   if (status >= 500) return 'DeepSeek 服务暂时出问题(' + status + '),过一会儿再试。';
   return '接口返回 ' + status + ':' + (m || '没有说明');
 }
@@ -916,12 +1067,20 @@ function requireKey() {
 /* ================= 接口 ================= */
 async function callAPI(messages, opts) {
   const o = opts || {};
+  const modelName = (settings.modelCustom || '').trim() || settings.model;
   const body = {
-    model: settings.model,
+    model: modelName,
     messages: messages,
     max_tokens: o.maxTokens || settings.maxTokens
   };
-  if (!/reasoner/.test(settings.model)) body.temperature = Number(settings.temperature) || 1.2;
+  const think = o.thinking || settings.thinking || 'off';
+  if (think === 'off') {
+    body.thinking = { type: 'disabled' };
+  } else {
+    body.thinking = { type: 'enabled' };
+    body.reasoning_effort = think;
+  }
+  if (!/reasoner/.test(modelName)) body.temperature = Number(settings.temperature) || 1.2;
   if (o.stream) body.stream = true;
 
   let res;
@@ -983,6 +1142,8 @@ async function callAPI(messages, opts) {
       try {
         const j = JSON.parse(data);
         const choice = j && j.choices && j.choices[0];
+        const rz = choice && choice.delta && choice.delta.reasoning_content;
+        if (rz && o.onReason) o.onReason(rz, out);
         const d = choice && choice.delta && choice.delta.content;
         if (d) {
           out += d;
@@ -1021,6 +1182,10 @@ function buildSystemPrompt() {
   if (book.genre.trim()) parts.push('作品类型:' + book.genre.trim());
   if (book.style.trim()) parts.push('额外文风要求:' + book.style.trim());
   if (book.bible.trim()) parts.push('【作品设定】\n' + book.bible.trim());
+
+  const cardsText = cardsPromptText(6000);
+  if (cardsText) parts.push(cardsText);
+
   if (book.facts.trim()) parts.push('【必须遵守的事实】\n' + book.facts.trim());
   if (book.styleGuide.trim()) parts.push('【文风指南(学手法,不照抄)】\n' + book.styleGuide.trim().slice(0, 3000));
 
@@ -1098,6 +1263,8 @@ function checkMessages(c) {
   const parts = [];
   if (book.bible.trim()) parts.push('【设定】\n' + book.bible.trim());
   if (book.facts.trim()) parts.push('【必须遵守的事实】\n' + book.facts.trim());
+  const cardsText = cardsPromptText(4000);
+  if (cardsText) parts.push(cardsText);
   const sums = book.chapters.slice(0, book.cur).map((x, i) =>
     '第' + (i + 1) + '章' + (x.title.trim() ? '《' + x.title.trim() + '》' : '') + ':' + (x.summary.trim() || '(无摘要)')
   );
@@ -1126,6 +1293,8 @@ function fixMessages(c, issues) {
   const parts = [];
   if (book.bible.trim()) parts.push('【设定】\n' + book.bible.trim());
   if (book.facts.trim()) parts.push('【必须遵守的事实】\n' + book.facts.trim());
+  const cardsText = cardsPromptText(3000);
+  if (cardsText) parts.push(cardsText);
   if (book.styleGuide.trim()) parts.push('【文风指南】\n' + book.styleGuide.trim().slice(0, 2000));
   const sums = book.chapters.slice(0, book.cur).map((x, i) =>
     '第' + (i + 1) + '章:' + (x.summary.trim() || '(无摘要)')
@@ -1201,6 +1370,7 @@ function renderWrite() {
   $('#backupBanner').hidden = !showBackup;
   if (showBackup) $('#backupBannerText').textContent = text;
 
+  renderHistory();
   autosizeBody();
 }
 
@@ -1279,6 +1449,7 @@ function renderBible() {
   $('#refInline').checked = !!book.refsInline;
   $('#styleGuide').value = book.styleGuide;
   renderRefs();
+  renderCards();
 }
 
 function renderRefs() {
@@ -1320,6 +1491,499 @@ function renderRefs() {
   });
 }
 
+function renderCards() {
+  const wrap = $('#cardList');
+  wrap.innerHTML = '';
+  Object.keys(CARD_TYPES).forEach(type => {
+    const list = book.cards.filter(c => c.type === type);
+    const head = document.createElement('div');
+    head.className = 'card-group-head';
+    const label = document.createElement('span');
+    label.textContent = CARD_TYPES[type] + '　' + list.length + ' 张';
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-text btn-sm';
+    add.textContent = '+ 新增';
+    add.addEventListener('click', () => addCard(type));
+    head.appendChild(label);
+    head.appendChild(add);
+    wrap.appendChild(head);
+    list.forEach(card => wrap.appendChild(cardEl(card)));
+  });
+  if (!book.cards.length) {
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.style.margin = '4px 0 10px';
+    p.textContent = '还没有卡片。点任意一类的「+ 新增」写第一张,或者上传一个 txt。';
+    wrap.appendChild(p);
+  }
+}
+
+function cardEl(card) {
+  const d = document.createElement('details');
+  d.className = 'card';
+  d.dataset.id = card.id;
+  if (card.id === openCardId) d.open = true;
+
+  const s = document.createElement('summary');
+  const nm = document.createElement('span');
+  nm.className = 'card-name';
+  nm.textContent = card.name || '未命名卡片';
+  const meta = document.createElement('span');
+  meta.className = 'hint';
+  meta.textContent = fmt(countWords(card.text)) + ' 字';
+  s.appendChild(nm);
+  s.appendChild(meta);
+  d.appendChild(s);
+
+  const nameIn = document.createElement('input');
+  nameIn.value = card.name;
+  nameIn.placeholder = '卡片名字,比如:林砚';
+  nameIn.addEventListener('input', e => {
+    card.name = e.target.value;
+    nm.textContent = card.name || '未命名卡片';
+    saveBookSoon();
+  });
+
+  const ta = document.createElement('textarea');
+  ta.rows = 8;
+  ta.value = card.text;
+  ta.placeholder = '写这张卡的内容。比如:27 岁,旧书修复师,手稳话少,怕水,左手有旧伤。说话爱用短句,从不解释。父亲是城西当铺的周老板。';
+  ta.addEventListener('input', e => {
+    card.text = e.target.value;
+    meta.textContent = fmt(countWords(card.text)) + ' 字';
+    saveBookSoon();
+  });
+
+  const imgs = document.createElement('div');
+  imgs.className = 'card-imgs';
+  (card.images || []).forEach(im => {
+    const box = document.createElement('div');
+    box.className = 'thumb';
+    const img = document.createElement('img');
+    img.src = im.data;
+    img.alt = im.name || '形象图';
+    img.addEventListener('click', () => viewImage(im.data, im.name));
+    const delImg = document.createElement('button');
+    delImg.type = 'button';
+    delImg.className = 'thumb-del';
+    delImg.textContent = '×';
+    delImg.setAttribute('aria-label', '删除这张图');
+    delImg.addEventListener('click', ev => {
+      ev.stopPropagation();
+      card.images = card.images.filter(x => x.id !== im.id);
+      openCardId = card.id;
+      saveBookSoon();
+      renderCards();
+    });
+    box.appendChild(img);
+    box.appendChild(delImg);
+    imgs.appendChild(box);
+  });
+  if ((card.images || []).length < 8) {
+    const addImgLabel = document.createElement('label');
+    addImgLabel.className = 'thumb-add';
+    addImgLabel.textContent = '+ 图';
+    const addImgInput = document.createElement('input');
+    addImgInput.type = 'file';
+    addImgInput.accept = 'image/*';
+    addImgInput.multiple = true;
+    addImgInput.hidden = true;
+    addImgInput.addEventListener('change', e => {
+      addCardImages(card, e.target.files);
+      e.target.value = '';
+    });
+    addImgLabel.appendChild(addImgInput);
+    imgs.appendChild(addImgLabel);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'card-actions';
+  const typeSel = document.createElement('select');
+  Object.keys(CARD_TYPES).forEach(t => {
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = CARD_TYPES[t];
+    typeSel.appendChild(o);
+  });
+  typeSel.value = card.type;
+  typeSel.addEventListener('change', e => {
+    card.type = e.target.value;
+    openCardId = card.id;
+    saveBookSoon();
+    renderCards();
+  });
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-text danger btn-sm';
+  del.textContent = '删除';
+  del.addEventListener('click', async () => {
+    const ok = await confirmSheet('删除这张卡?', (card.name || '未命名卡片') + ' 会从设定里移除,写完的书稿不受影响。');
+    if (!ok) return;
+    book.cards = book.cards.filter(x => x.id !== card.id);
+    saveBookSoon();
+    renderCards();
+  });
+  row.appendChild(typeSel);
+  row.appendChild(del);
+
+  d.appendChild(nameIn);
+  d.appendChild(ta);
+  d.appendChild(imgs);
+
+  const lookWrap = document.createElement('div');
+  lookWrap.className = 'look-box';
+  const lookLab = document.createElement('label');
+  lookLab.textContent = '外貌描述(每次生成都会带上,不用每次发图)';
+  const lookTa = document.createElement('textarea');
+  lookTa.rows = 3;
+  lookTa.value = card.look || '';
+  lookTa.placeholder = '点「按图生成外貌」,或自己写:短发,左眉一道旧疤,惯穿深灰长衫。';
+  lookTa.addEventListener('input', e => {
+    card.look = e.target.value;
+    saveBookSoon();
+  });
+  const lookBtn = document.createElement('button');
+  lookBtn.type = 'button';
+  lookBtn.className = 'btn btn-ghost btn-sm';
+  lookBtn.textContent = '按图生成外貌';
+  lookBtn.addEventListener('click', () => generateLook(card, lookTa, lookBtn));
+  lookWrap.appendChild(lookLab);
+  lookWrap.appendChild(lookTa);
+  lookWrap.appendChild(lookBtn);
+  d.appendChild(lookWrap);
+
+  d.appendChild(row);
+  return d;
+}
+
+function fileToResizedDataUrl(file, maxSide) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+          const w = Math.max(1, Math.round((img.width || 1) * scale));
+          const h = Math.max(1, Math.round((img.height || 1) * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => reject(new Error('这张图读不出来'));
+      img.src = String(fr.result);
+    };
+    fr.onerror = () => reject(fr.error || new Error('读取失败'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function addCardImages(card, fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (!Array.isArray(card.images)) card.images = [];
+  let n = 0;
+  for (const f of files) {
+    if (card.images.length >= 8) { toast('一张卡最多挂 8 张图'); break; }
+    if (!/^image\//.test(f.type || '') && !/\.(png|jpe?g|webp|gif|bmp|heic)$/i.test(f.name || '')) continue;
+    try {
+      const data = await fileToResizedDataUrl(f, 900);
+      card.images.push({ id: uid('i'), name: f.name || '形象图', data: data });
+      n++;
+    } catch (e) { /* 跳过读不出的图 */ }
+  }
+  if (n) {
+    openCardId = card.id;
+    saveBookSoon();
+    renderCards();
+    toast('加了 ' + n + ' 张图');
+  } else {
+    toast('没读成,换 jpg / png 再试');
+  }
+}
+
+function viewImage(data, name) {
+  showSheet({
+    title: name || '角色形象图',
+    image: data,
+    imageName: name || '',
+    actions: [{ label: '关闭', primary: true }]
+  });
+}
+
+async function generateLook(card, ta, btn) {
+  if (busy) { toast('等这次生成结束'); return; }
+  if (!requireKey()) return;
+  const modelName = (settings.modelCustom || '').trim() || settings.model;
+  if (!/flash/i.test(modelName)) {
+    showSheet({
+      title: '当前模型看不了图',
+      text: '看图要切到 deepseek-flash。去「设置 → 模型」换一下再试。',
+      actions: [
+        { label: '去设置', primary: true, onClick: () => switchTab('set') },
+        { label: '知道了' }
+      ]
+    });
+    return;
+  }
+  const imgs = (card.images || []).slice(0, 4);
+  if (!imgs.length) { toast('这张卡还没有图,先加一张'); return; }
+  busy = true;
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = '看着图写…';
+  try {
+    const content = [{
+      type: 'text',
+      text: '请仔细观察这些图片,写一段用于小说写作的人物外貌设定,200 字以内。\n' +
+        '只写看得见的客观特征:性别与年龄感、发型发色、脸型五官、体型、惯常衣着、明显标记(疤、痣、饰物)。\n' +
+        '不要写性格、故事和评论,不要分点,直接给一段连贯的话。'
+    }];
+    imgs.forEach(im => content.push({ type: 'image_url', image_url: { url: im.data } }));
+    const out = await callAPI([{ role: 'user', content: content }], { stream: false, maxTokens: 400 });
+    card.look = (out || '').trim();
+    ta.value = card.look;
+    saveBookSoon();
+    toast('外貌描述已生成,可以自己改');
+  } catch (err) {
+    showError(err);
+  } finally {
+    busy = false;
+    btn.disabled = false;
+    btn.textContent = oldText || '按图生成外貌';
+  }
+}
+
+function quickAddCard() {
+  const actions = Object.keys(CARD_TYPES).map(type => ({
+    label: CARD_TYPES[type],
+    onClick: () => {
+      const card = { id: uid('k'), type: type, name: '', text: '', images: [] };
+      book.cards.push(card);
+      openCardId = card.id;
+      saveBookSoon();
+      renderAll();
+      switchTab('bible');
+      setTimeout(() => {
+        const el = document.querySelector('#cardList details.card[data-id="' + card.id + '"]');
+        if (el) {
+          el.open = true;
+          el.scrollIntoView({ block: 'center' });
+          const inp = el.querySelector('input');
+          if (inp) setTimeout(() => inp.focus(), 60);
+        }
+        openCardId = null;
+      }, 120);
+    }
+  }));
+  actions.push({ label: '取消' });
+  showSheet({ title: '加一张设定卡', text: '选个分类,填完随时切回正文接着写。', actions: actions });
+}
+
+function addCard(type) {
+  const card = { id: uid('k'), type: type || 'rule', name: '', text: '', images: [] };
+  book.cards.push(card);
+  openCardId = card.id;
+  saveBookSoon();
+  renderCards();
+  const el = document.querySelector('#cardList details.card[data-id="' + card.id + '"]');
+  if (el) {
+    el.open = true;
+    const inp = el.querySelector('input');
+    if (inp) setTimeout(() => inp.focus(), 50);
+    el.scrollIntoView({ block: 'center' });
+  }
+  openCardId = null;
+}
+
+function guessCardType(title) {
+  const t = title || '';
+  if (/人物|角色|主角|配角|反派|BOSS/.test(t)) return 'character';
+  if (/世界|背景|时代|地理|社会|历史/.test(t)) return 'world';
+  if (/地点|场所|地图|物品|道具|武器|器物|门派/.test(t)) return 'place';
+  return 'rule';
+}
+
+function parseCardFile(name, text) {
+  const base = name.replace(/\.[^.]+$/, '');
+  const out = [];
+  let cur = null;
+  let ctxType = null;
+  String(text).split(/\r?\n/).forEach(line => {
+    const m = line.match(/^(#{1,4})\s+(.+?)\s*$/);
+    if (m) {
+      const level = m[1].length;
+      const title = m[2].trim();
+      if (level === 1 && /人物|角色|主角|配角|世界观|世界|设定|规则|地点|物品/.test(title)) {
+        ctxType = guessCardType(title);
+        if (cur && cur.text.trim()) { out.push(cur); cur = null; }
+        return;
+      }
+      if (cur && cur.text.trim()) out.push(cur);
+      cur = { name: title, text: '', type: ctxType };
+    } else {
+      if (!cur) cur = { name: base, text: '', type: ctxType };
+      cur.text += line + '\n';
+    }
+  });
+  if (cur && cur.text.trim()) out.push(cur);
+  const clean = out
+    .map(c => ({ name: c.name.trim(), text: c.text.trim(), type: c.type }))
+    .filter(c => c.text);
+  if (!clean.length) clean.push({ name: base, text: String(text).trim().slice(0, 8000), type: null });
+  return clean.map(c => ({
+    id: uid('k'),
+    type: c.type || guessCardType(c.name),
+    name: c.name,
+    text: c.text.slice(0, 8000)
+  }));
+}
+
+async function addCardFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  let n = 0;
+  for (const f of files) {
+    try {
+      const text = await readFileText(f);
+      const cards = parseCardFile(f.name, text);
+      book.cards.push(...cards);
+      n += cards.length;
+    } catch (e) { /* 跳过 */ }
+  }
+  if (n) { saveBookSoon(); renderCards(); }
+  toast(n ? ('加入 ' + n + ' 张卡片') : '没读成,换成 .txt 或 .md 再试');
+}
+
+function cardsPromptText(budget) {
+  const order = ['character', 'rule', 'world', 'place'];
+  const chunks = [];
+  let left = budget || 6000;
+  for (const type of order) {
+    const cards = book.cards.filter(c => c.type === type && c.text.trim());
+    if (!cards.length) continue;
+    const lines = [];
+    for (const c of cards) {
+      const base = '· ' + (c.name.trim() || '未命名') + ':' + c.text.trim().replace(/\n+/g, ' / ');
+      const look = (c.look || '').trim();
+      const line = base + (look ? '【外貌】' + look.replace(/\n+/g, ' ') : '');
+      if (left - line.length < 0) break;
+      lines.push(line);
+      left -= line.length;
+    }
+    if (lines.length) chunks.push('【' + CARD_TYPES[type] + '】\n' + lines.join('\n'));
+    if (left <= 0) break;
+  }
+  return chunks.join('\n\n');
+}
+
+function pushHistory(c) {
+  if (!Array.isArray(c.history)) c.history = [];
+  if (!c.body.trim()) return;
+  c.history.unshift({ at: Date.now(), body: c.body });
+  c.history = c.history.slice(0, 3);
+}
+
+function renderHistory() {
+  const box = $('#historyBox');
+  const wrap = $('#historyList');
+  if (!box || !wrap) return;
+  const c = curChapter();
+  const list = Array.isArray(c.history) ? c.history : [];
+  box.hidden = !list.length;
+  wrap.innerHTML = '';
+  list.forEach((h, i) => {
+    const row = document.createElement('div');
+    row.className = 'ref-row';
+    const main = document.createElement('div');
+    main.className = 'ref-main';
+    const n = document.createElement('div');
+    n.className = 'rf-name';
+    n.textContent = '第 ' + (list.length - i) + ' 版　' + fmtDate(h.at) + '　' + fmt(countWords(h.body)) + ' 字';
+    main.appendChild(n);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost btn-sm';
+    btn.textContent = '恢复';
+    btn.addEventListener('click', async () => {
+      const ok = await confirmSheet('恢复这个版本?', '当前正文会被换成这个旧版本;现在的正文会存进历史,还能再换回来。');
+      if (!ok) return;
+      pushHistory(c);
+      c.body = h.body;
+      $('#chBody').value = c.body;
+      $('#chWords').textContent = fmt(countWords(c.body)) + ' 字';
+      await saveBookNow();
+      renderTop();
+      renderHistory();
+      autosizeBody();
+      toast('已恢复');
+    });
+    row.appendChild(main);
+    row.appendChild(btn);
+    wrap.appendChild(row);
+  });
+}
+
+function attachImages(messages) {
+  if (!settings.sendImages) return messages;
+  const modelName = (settings.modelCustom || '').trim() || settings.model;
+  if (!/flash/i.test(modelName)) return messages;
+  if (!book.cards || !book.cards.length) return messages;
+  const withImgs = book.cards.filter(c => Array.isArray(c.images) && c.images.length);
+  if (!withImgs.length) return messages;
+  withImgs.sort((a, b) => (a.type === 'character' ? 0 : 1) - (b.type === 'character' ? 0 : 1));
+  const picked = [];
+  for (const c of withImgs) {
+    for (const im of c.images) {
+      if (picked.length >= 4) break;
+      if (typeof im.data === 'string' && /^data:image\/(jpeg|png|gif|webp)/i.test(im.data)) {
+        picked.push({ name: (c.name || '未命名角色').trim(), data: im.data });
+      }
+    }
+    if (picked.length >= 4) break;
+  }
+  if (!picked.length) return messages;
+  const counts = {};
+  picked.forEach(p => { counts[p.name] = (counts[p.name] || 0) + 1; });
+  const label = '【人物形象参考】' + Object.keys(counts).map(n => n + ' ' + counts[n] + ' 张').join(';') +
+    '。写到的这些角色,请按图中的长相、发型、体型、衣着来描写,不要与图片冲突。';
+  const first = messages[0];
+  if (!first || first.role !== 'system') return messages;
+  const content = [{ type: 'text', text: String(first.content) + '\n\n' + label }];
+  picked.forEach(p => {
+    content.push({ type: 'image_url', image_url: { url: p.data } });
+  });
+  messages[0] = { role: 'system', content: content };
+  return messages;
+}
+
+function renderReqPreview() {
+  const el = $('#reqPreview');
+  if (!el) return;
+  const modelName = (settings.modelCustom || '').trim() || settings.model;
+  const thinkMap = { off: '关闭', low: '低', high: '高', max: '最高' };
+  const think = thinkMap[settings.thinking] || '关闭';
+  const temp = settings.thinking === 'off'
+    ? '温度 ' + Number(settings.temperature).toFixed(1)
+    : '温度不生效(思考已开)';
+  const visionOK = /flash/i.test(modelName);
+  const imgNum = (book.cards || []).reduce((s, c) => s + ((c.images && c.images.length) || 0), 0);
+  let imgText = '附图 = 关(用文字外貌)';
+  if (settings.sendImages && visionOK && imgNum) imgText = '附图 = ' + Math.min(4, imgNum) + ' 张';
+  else if (settings.sendImages && !visionOK) imgText = '附图 = 关(当前模型看不了图)';
+  else if (settings.sendImages && !imgNum) imgText = '附图 = 关(卡片还没有图)';
+  el.textContent = '当前请求:model = ' + modelName + '　thinking = ' +
+    (settings.thinking === 'off' ? 'disabled' : 'enabled(' + settings.thinking + ')') +
+    '　' + imgText + '　' + temp;
+}
+
 function renderSettings() {
   $('#apiKey').value = settings.apiKey;
   const sel = $('#model');
@@ -1330,6 +1994,9 @@ function renderSettings() {
     sel.appendChild(opt);
   }
   sel.value = settings.model;
+  $('#thinking').value = settings.thinking;
+  $('#modelCustom').value = settings.modelCustom;
+  $('#sendImages').checked = !!settings.sendImages;
   $('#temp').value = String(settings.temperature);
   $('#tempVal').textContent = Number(settings.temperature).toFixed(1);
   $('#targetWords').value = String(settings.targetWords);
@@ -1341,6 +2008,13 @@ function renderSettings() {
   }
   $('#maxTokens').value = String(settings.maxTokens);
   $('#baseUrl').value = settings.baseUrl;
+  $('#ghUser').value = settings.ghUser;
+  $('#ghRepo').value = settings.ghRepo;
+  $('#ghBranch').value = settings.ghBranch || 'main';
+  $('#ghToken').value = settings.ghToken;
+  $('#ghAuto').checked = !!settings.autoSync;
+  renderReqPreview();
+  renderSyncInfo();
   renderStorageInfo();
 }
 
@@ -1404,12 +2078,14 @@ async function generate(fromScratch) {
   if (!requireKey()) return;
   const c = curChapter();
   if (fromScratch) {
+    pushHistory(c);
     c.body = '';
     $('#chBody').value = '';
     $('#chWords').textContent = '0 字';
   }
-  const msgs = writeMessages(c);
+  const msgs = attachImages(writeMessages(c));
   let acc = c.body;
+  let reasonChars = 0;
   setBusy(true, '运笔中…');
   abortCtrl = new AbortController();
   try {
@@ -1417,10 +2093,15 @@ async function generate(fromScratch) {
       stream: true,
       signal: abortCtrl.signal,
       maxTokens: settings.maxTokens,
+      onReason: r => {
+        reasonChars += r.length;
+        $('#btnWrite').textContent = '思考中… ' + fmt(reasonChars) + ' 字';
+      },
       onDelta: d => {
         acc += d;
         $('#chBody').value = acc;
         $('#chWords').textContent = fmt(countWords(acc)) + ' 字';
+        $('#btnWrite').textContent = '运笔中…';
         followStream();
       }
     });
@@ -1428,6 +2109,7 @@ async function generate(fromScratch) {
     await saveBookNow();
     renderTop();
     toast(fromScratch && acc.trim() ? '这一章写好了' : '这一段写好了');
+    scheduleSync(30000);
   } catch (err) {
     c.body = acc;
     await saveBookNow();
@@ -1467,6 +2149,7 @@ async function summarize() {
     $('#chSummary').value = c.summary;
     renderTOC();
     toast('摘要已存,写后面的章节会参考它');
+    scheduleSync(15000);
   } catch (err) {
     showError(err);
   } finally {
@@ -1482,7 +2165,7 @@ async function checkConsistency() {
   setBusy(true, '审校中…');
   let issues = '';
   try {
-    issues = (await callAPI(checkMessages(c), { stream: false, maxTokens: 1400 })).trim();
+    issues = (await callAPI(attachImages(checkMessages(c)), { stream: false, maxTokens: 1400 })).trim();
   } catch (err) {
     showError(err);
     setBusy(false);
@@ -1513,11 +2196,12 @@ async function applyFix(issues) {
     if (!go) return;
   }
   const prevBody = c.body;
+  pushHistory(c);
   setBusy(true, '修改中…');
   try {
     const need = Math.ceil(countWords(prevBody) * 1.1) + 400;
     const maxTok = Math.min(8192, Math.max(settings.maxTokens, need));
-    const fixed = (await callAPI(fixMessages(c, issues), { stream: false, maxTokens: maxTok })).trim();
+    const fixed = (await callAPI(attachImages(fixMessages(c, issues)), { stream: false, maxTokens: maxTok })).trim();
     if (!fixed) throw new Error('模型没有返回修改后的正文,可以再试一次。');
     c.body = fixed;
     $('#chBody').value = fixed;
@@ -1525,6 +2209,7 @@ async function applyFix(issues) {
     await saveBookNow();
     renderTop();
     autosizeBody();
+    scheduleSync(15000);
     showSheet({
       title: '改好了',
       text: '本章已按审校意见改写,共 ' + fmt(countWords(fixed)) + ' 字。改坏了可以撤销。',
@@ -1559,6 +2244,7 @@ function addChapter() {
   renderTOC();
   switchTab('write');
   toast('新建了第' + book.chapters.length + '章');
+  scheduleSync(15000);
 }
 
 async function deleteChapter() {
@@ -1660,9 +2346,14 @@ async function duplicateBook(entry) {
   copy.createdAt = Date.now();
   copy.updatedAt = Date.now();
   copy.chapters = copy.chapters.map(c => ({
-    id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req
+    id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req,
+    history: Array.isArray(c.history) ? c.history : []
   }));
   copy.refs = copy.refs.map(r => ({ id: uid('r'), name: r.name, text: r.text }));
+  copy.cards = (copy.cards || []).map(k => ({
+    id: uid('k'), type: k.type, name: k.name, text: k.text, look: k.look || '',
+    images: (k.images || []).map(im => ({ id: uid('i'), name: im.name, data: im.data }))
+  }));
   await kvSet('book:' + copy.id, copy);
   index.unshift({
     id: copy.id, title: copy.title, updatedAt: copy.updatedAt,
@@ -1680,6 +2371,9 @@ async function deleteBook(entry) {
     '这本书的正文、设定和范本会从这台手机上删掉,不能恢复。'
   );
   if (!ok) return;
+  tombstones.push({ id: entry.id, at: Date.now() });
+  tombstones = tombstones.slice(-300);
+  await kvSet('tombstones', tombstones);
   await kvDel('book:' + entry.id);
   index = index.filter(x => x.id !== entry.id);
   await kvSet('index', index);
@@ -1765,6 +2459,236 @@ async function extractStyle() {
   }
 }
 
+/* ================= 多设备同步(GitHub 私有仓库) ================= */
+function b64encodeUtf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+function b64decodeUtf8(b64) {
+  const bin = atob(String(b64).replace(/\s+/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function syncReady() {
+  return !!(settings.ghUser.trim() && settings.ghRepo.trim() && settings.ghToken.trim());
+}
+function ghHeaders() {
+  return {
+    'Authorization': 'Bearer ' + settings.ghToken.trim(),
+    'Accept': 'application/vnd.github+json'
+  };
+}
+function ghRepoUrl() {
+  const branch = settings.ghBranch.trim() || 'main';
+  return 'https://api.github.com/repos/' + encodeURIComponent(settings.ghUser.trim()) + '/' +
+    encodeURIComponent(settings.ghRepo.trim()) + '/contents/novel-data.json?ref=' + encodeURIComponent(branch);
+}
+async function ghGetFile() {
+  let res;
+  try {
+    res = await fetch(ghRepoUrl() + '&t=' + Date.now(), { headers: ghHeaders() });
+  } catch (e) {
+    throw new Error('连不上 GitHub。检查网络;国内访问 GitHub 偶尔不稳,可以等一会儿再试。');
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    let msg = '';
+    try { const j = await res.json(); msg = j && j.message ? j.message : ''; } catch (e) { /* 忽略 */ }
+    if (res.status === 401) throw new Error('Token 不对或已经过期。回 GitHub 重新生成一个再填进来。');
+    if (res.status === 403) throw new Error('这个 Token 没有读写这个仓库的权限。检查:是否只授权 novel-sync、Contents 是否设为 Read and write。');
+    throw new Error('GitHub 返回 ' + res.status + (msg ? ':' + msg : ''));
+  }
+  const j = await res.json();
+  let data = null;
+  try { data = JSON.parse(b64decodeUtf8(j.content)); } catch (e) { data = null; }
+  return { sha: j.sha, data: data };
+}
+async function ghPutFile(payload, sha) {
+  const url = 'https://api.github.com/repos/' + encodeURIComponent(settings.ghUser.trim()) + '/' +
+    encodeURIComponent(settings.ghRepo.trim()) + '/contents/novel-data.json';
+  const body = {
+    message: '写作进度 ' + new Date().toLocaleString('zh-CN'),
+    content: b64encodeUtf8(JSON.stringify(payload)),
+    branch: settings.ghBranch.trim() || 'main'
+  };
+  if (sha) body.sha = sha;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'PUT',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()),
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    throw new Error('上传时连不上 GitHub,检查网络后再试。');
+  }
+  if (res.ok) return 'ok';
+  if (res.status === 409 || res.status === 422) return 'conflict';
+  let msg = '';
+  try { const j = await res.json(); msg = j && j.message ? j.message : ''; } catch (e) { /* 忽略 */ }
+  if (res.status === 401) throw new Error('Token 不对或已经过期。');
+  if (res.status === 403) throw new Error('Token 没有写入权限,检查 Contents 是否设为 Read and write。');
+  throw new Error('上传失败(' + res.status + ')' + (msg ? ':' + msg : ''));
+}
+function isEmptyStarter(b) {
+  return !!b && !((b.title || '').trim()) &&
+    (b.chapters || []).length === 1 &&
+    !((b.chapters[0] && b.chapters[0].body) || '').trim() &&
+    !((b.bible || '').trim()) &&
+    !((b.cards || []).length);
+}
+function mergePayloads(local, remote) {
+  const map = new Map();
+  const remoteHasBooks = (remote.books || []).length > 0;
+  (local.books || []).forEach(b => {
+    if (remoteHasBooks && isEmptyStarter(b)) return;
+    map.set(b.id, b);
+  });
+  (remote.books || []).forEach(rb => {
+    const lb = map.get(rb.id);
+    if (!lb || (Number(rb.updatedAt) || 0) > (Number(lb.updatedAt) || 0)) map.set(rb.id, rb);
+  });
+  const del = new Map();
+  (local.deleted || []).concat(remote.deleted || []).forEach(d => {
+    if (d && d.id) del.set(d.id, Math.max(del.get(d.id) || 0, Number(d.at) || 0));
+  });
+  const books = Array.from(map.values()).filter(b => {
+    const at = del.get(b.id);
+    return !(at && at >= (Number(b.updatedAt) || 0));
+  });
+  return {
+    app: 'novel-writer',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    books: books,
+    deleted: Array.from(del.entries()).map(pair => ({ id: pair[0], at: pair[1] })).slice(-300)
+  };
+}
+async function applyPayload(p) {
+  const list = [];
+  (p.books || []).forEach(raw => {
+    try { list.push(normalizeBook(raw)); } catch (e) { /* 跳过坏档 */ }
+  });
+  if (!list.length) return false;
+  const keep = new Set(list.map(b => b.id));
+  for (const e of index.slice()) {
+    if (!keep.has(e.id)) await kvDel('book:' + e.id);
+  }
+  for (const b of list) await kvSet('book:' + b.id, b);
+  tombstones = Array.isArray(p.deleted) ? p.deleted.slice(-300) : [];
+  await kvSet('tombstones', tombstones);
+  index = list.map(b => ({
+    id: b.id,
+    title: b.title || '',
+    updatedAt: Number(b.updatedAt) || Date.now(),
+    words: b.chapters.reduce((s, c) => s + countWords(c.body), 0),
+    chapters: b.chapters.length
+  }));
+  index.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  await kvSet('index', index);
+  if (!list.some(b => b.id === bookId)) {
+    bookId = list[0].id;
+    await kvSet('curBook', bookId);
+  }
+  book = await loadBookById(bookId);
+  renderAll();
+  return true;
+}
+async function buildSyncPayload() {
+  await saveBookNow();
+  const books = [];
+  for (const e of index) {
+    try { books.push(await loadBookById(e.id)); } catch (err) { /* 跳过 */ }
+  }
+  return {
+    app: 'novel-writer',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    books: books,
+    deleted: tombstones.slice(-300)
+  };
+}
+async function syncNow(silent) {
+  if (!syncReady()) {
+    if (!silent) {
+      showSheet({
+        title: '还没配好同步',
+        text: '先在「多设备同步」里填 GitHub 用户名、私有仓库名和 Token,下面有建仓库的步骤。',
+        actions: [{ label: '知道了', primary: true }]
+      });
+    }
+    return;
+  }
+  if (syncBusy) return;
+  if (busy) { if (!silent) toast('正在生成,写完再同步'); return; }
+  if (silent) {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT')) {
+      scheduleSync(20000);
+      return;
+    }
+  }
+  syncBusy = true;
+  const btn = $('#btnSyncNow');
+  if (btn) btn.disabled = true;
+  try {
+    const remote = await ghGetFile();
+    const local = await buildSyncPayload();
+    const merged = (remote && remote.data && Array.isArray(remote.data.books))
+      ? mergePayloads(local, remote.data)
+      : local;
+    await applyPayload(merged);
+    let done = await ghPutFile(merged, remote ? remote.sha : null);
+    if (done === 'conflict') {
+      const again = await ghGetFile();
+      const merged2 = (again && again.data) ? mergePayloads(merged, again.data) : merged;
+      await applyPayload(merged2);
+      done = await ghPutFile(merged2, again ? again.sha : null);
+      if (done === 'conflict') throw new Error('另一端刚改过,再点一次同步就行。');
+    }
+    settings.lastSync = Date.now();
+    saveSettings();
+    renderSyncInfo();
+    if (!silent) toast('已同步,两端进度一致');
+  } catch (err) {
+    if (silent) console.warn('自动同步失败', err);
+    else showSheet({
+      title: '同步没成功',
+      text: (err && err.message) ? err.message : '不知道出了什么问题',
+      actions: [{ label: '知道了', primary: true }]
+    });
+  } finally {
+    syncBusy = false;
+    if (btn) btn.disabled = false;
+  }
+}
+function scheduleSync(delay) {
+  if (!syncReady() || !settings.autoSync) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow(true), delay || 15000);
+}
+function renderSyncInfo() {
+  const el = $('#syncInfo');
+  if (!el) return;
+  if (!syncReady()) {
+    el.textContent = '还没配置。配好以后,手机和电脑打开同一个网址、填同样的信息,就能接上同一份进度。';
+    return;
+  }
+  let when = '';
+  if (settings.lastSync) {
+    const d = new Date(settings.lastSync);
+    const p = n => String(n).padStart(2, '0');
+    when = '　上次同步:' + fmtDate(settings.lastSync) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  el.textContent = '已配置 ' + settings.ghUser.trim() + '/' + settings.ghRepo.trim() + when;
+}
+
 /* ================= 导入导出 ================= */
 function download(name, text, type) {
   const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
@@ -1790,6 +2714,12 @@ function bookToTxt(bk) {
   if (bk.style.trim()) lines.push('文风:' + bk.style.trim());
   if (bk.bible.trim()) lines.push('', '【设定】', bk.bible.trim());
   if (bk.facts.trim()) lines.push('', '【必须遵守的事实】', bk.facts.trim());
+  if (bk.cards && bk.cards.length) {
+    lines.push('', '【卡片】');
+    bk.cards.forEach(c => {
+      lines.push('· ' + (c.name || '') + ':' + c.text.replace(/\n+/g, ' / '));
+    });
+  }
   lines.push('');
   bk.chapters.forEach((c, i) => {
     lines.push('第' + (i + 1) + '章' + (c.title.trim() ? '　' + c.title.trim() : ''), '');
@@ -1848,8 +2778,12 @@ function importBackupFile(file) {
         const nb = normalizeBook(raw);
         nb.id = uid('b');
         nb.title = nb.title || '导入的作品';
-        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req }));
+        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req, history: Array.isArray(c.history) ? c.history : [] }));
         nb.refs = nb.refs.map(r => ({ id: uid('r'), name: r.name, text: r.text }));
+        nb.cards = nb.cards.map(k => ({
+          id: uid('k'), type: k.type, name: k.name, text: k.text, look: k.look || '',
+          images: (k.images || []).map(im => ({ id: uid('i'), name: im.name, data: im.data }))
+        }));
         nb.updatedAt = Date.now();
         await kvSet('book:' + nb.id, nb);
         index.unshift({
@@ -1931,6 +2865,7 @@ function bind() {
   });
   $('#btnAddCh').addEventListener('click', addChapter);
   $('#btnDelCh').addEventListener('click', deleteChapter);
+  $('#btnQuickCard').addEventListener('click', quickAddCard);
 
   const bindBookField = (sel, key) => {
     $(sel).addEventListener('input', e => {
@@ -1967,6 +2902,10 @@ function bind() {
     addRefs(e.target.files);
     e.target.value = '';
   });
+  $('#cardFile').addEventListener('change', e => {
+    addCardFiles(e.target.files);
+    e.target.value = '';
+  });
   $('#refInline').addEventListener('change', e => {
     book.refsInline = !!e.target.checked;
     saveBookSoon();
@@ -1989,11 +2928,28 @@ function bind() {
   $('#model').addEventListener('change', e => {
     settings.model = e.target.value;
     saveSettings();
+    renderReqPreview();
+  });
+  $('#thinking').addEventListener('change', e => {
+    settings.thinking = e.target.value;
+    saveSettings();
+    renderReqPreview();
+  });
+  $('#modelCustom').addEventListener('input', e => {
+    settings.modelCustom = e.target.value;
+    saveSettings();
+    renderReqPreview();
+  });
+  $('#sendImages').addEventListener('change', e => {
+    settings.sendImages = !!e.target.checked;
+    saveSettings();
+    renderReqPreview();
   });
   $('#temp').addEventListener('input', e => {
     settings.temperature = parseFloat(e.target.value);
     $('#tempVal').textContent = settings.temperature.toFixed(1);
     saveSettings();
+    renderReqPreview();
   });
   $('#targetWords').addEventListener('change', e => {
     const v = parseInt(e.target.value, 10);
@@ -2010,6 +2966,21 @@ function bind() {
     e.target.value = settings.baseUrl;
     saveSettings();
   });
+
+  [['#ghUser', 'ghUser'], ['#ghRepo', 'ghRepo'], ['#ghBranch', 'ghBranch'], ['#ghToken', 'ghToken']].forEach(pair => {
+    $(pair[0]).addEventListener('input', e => {
+      settings[pair[1]] = e.target.value;
+      saveSettings();
+      renderSyncInfo();
+    });
+  });
+  $('#ghAuto').addEventListener('change', e => {
+    settings.autoSync = !!e.target.checked;
+    saveSettings();
+    renderSyncInfo();
+    if (settings.autoSync) scheduleSync(1500);
+  });
+  $('#btnSyncNow').addEventListener('click', () => syncNow(false));
 
   $('#btnExportTxt').addEventListener('click', () => exportBookTxt(null));
   $('#btnExportAll').addEventListener('click', exportAll);
@@ -2028,7 +2999,12 @@ function bind() {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') saveBookNow();
+    if (document.visibilityState === 'hidden') {
+      saveBookNow();
+      if (syncReady() && settings.autoSync) syncNow(true);
+    } else if (syncReady() && settings.autoSync) {
+      scheduleSync(2500);
+    }
   });
   window.addEventListener('pagehide', () => { saveBookNow(); });
 }
@@ -2038,6 +3014,8 @@ async function boot() {
   try {
     await initStore();
     await loadSettings();
+    tombstones = await kvGet('tombstones');
+    if (!Array.isArray(tombstones)) tombstones = [];
     index = await loadIndex();
     const storedCur = await kvGet('curBook');
     bookId = (typeof storedCur === 'string' && index.some(x => x.id === storedCur))
@@ -2053,6 +3031,7 @@ async function boot() {
     }
     renderAll();
     bind();
+    if (syncReady() && settings.autoSync) setTimeout(() => syncNow(true), 2000);
     setTimeout(() => {
       if (storeMode === 'mem') {
         showSheet({
