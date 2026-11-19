@@ -168,6 +168,7 @@ input[type=range]{background:transparent;border:0;padding:4px 0;accent-color:var
 .ch-row .m{font-size:12px;color:var(--ink3);white-space:nowrap;font-variant-numeric:tabular-nums}
 .ch-row.cur{background:rgba(155,58,43,.055)}
 .ch-row.cur .t{font-weight:600}
+.btag{display:inline-block;font-size:11px;line-height:1.5;padding:0 6px;border:1px solid #B9AE98;border-radius:999px;color:#6B6152;margin-right:6px;vertical-align:1px;font-weight:500}
 .toc-hint{font-size:12px;color:var(--ink3);line-height:1.6;margin:0 0 4px}
 
 .shelf-row{
@@ -287,6 +288,13 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
       <span id="backupBannerText"></span>
       <button id="bannerBackupGo" class="link" type="button">去备份</button>
     </div>
+    <div id="branchBanner" class="banner" hidden style="border-color:#7A7160;background:#F3F1EA;color:#5C5346">
+      <span id="branchBannerText"></span>
+      <span style="white-space:nowrap">
+        <button id="bannerBranchRename" class="link" type="button">改名</button>
+        <button id="bannerBranchBack" class="link" type="button">回主线</button>
+      </span>
+    </div>
 
     <div class="ch-head">
       <span id="sealNum" class="seal">一</span>
@@ -332,7 +340,10 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
   </section>
 
   <section id="tab-toc" class="tab">
-    <p class="toc-hint">点一章跳过去。写完一章记得点「存摘要」,后面的章节才记得住前情。发现前后对不上,就在正文页点「检查一致」。</p>
+    <p class="toc-hint">点一章跳过去。想要“另一种可能”:切到分叉的那一章,点下面的「从本章分一支」,系统会复制这一章、单独开一条线,主线一个字都不会动。写完一章记得存摘要。</p>
+    <div class="actions" style="margin-bottom:6px">
+      <button id="btnBranch" class="btn btn-ghost btn-sm" type="button">从本章分一支</button>
+    </div>
     <div id="tocList"></div>
     <button id="btnAddCh" class="btn btn-ghost" type="button" style="width:100%;margin-top:18px">新建一章</button>
   </section>
@@ -821,7 +832,7 @@ let openCardId = null;
 let globalRefs = [];
 let refTombstones = [];
 
-function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [], gen: null }; }
+function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [], gen: null, branchOf: '' }; }
 const CARD_TYPES = { character: '人物卡', world: '世界观', rule: '设定 / 规则', place: '地点 / 物品' };
 function blankPrefs() {
   return { person: '第三人称限知', para: '长短交错', dialog: '适中', detail: '适中', ending: '留悬念', avoid: '' };
@@ -833,6 +844,7 @@ function newBookObj(title) {
     genre: '', style: '', bible: '', facts: '', autoNotes: '',
     prefs: blankPrefs(),
     styleGuide: '', refs: [], refsInline: false, cards: [],
+    lines: [], curLine: null,
     chapters: [blankChapter()],
     cur: 0,
     createdAt: Date.now(),
@@ -880,8 +892,17 @@ function normalizeBook(b) {
       gen: (c && c.gen && typeof c.gen.text === 'string' && c.gen.text) ? {
         at: Number(c.gen.at) || Date.now(),
         text: c.gen.text
-      } : null
+      } : null,
+      branchOf: (c && typeof c.branchOf === 'string') ? c.branchOf : ''
     })) : [blankChapter()];
+    out.lines = Array.isArray(b.lines) ? b.lines.filter(l => l && typeof l.id === 'string').map(l => ({
+      id: l.id,
+      name: typeof l.name === 'string' ? l.name : '支线',
+      from: String(l.from || ''),
+      pos: Math.max(0, parseInt(l.pos, 10) || 0),
+      createdAt: Number(l.createdAt) || Date.now()
+    })) : [];
+    out.curLine = (typeof b.curLine === 'string' && out.lines.some(l => l.id === b.curLine)) ? b.curLine : null;
     const ci = parseInt(b.cur, 10);
     out.cur = Math.min(Math.max(0, isNaN(ci) ? 0 : ci), out.chapters.length - 1);
     out.createdAt = Number(b.createdAt) || Date.now();
@@ -891,6 +912,35 @@ function normalizeBook(b) {
 }
 
 function curChapter() { return book.chapters[Math.min(book.cur, book.chapters.length - 1)]; }
+function currentLine() {
+  if (!book || !book.curLine) return null;
+  return (book.lines || []).find(l => l.id === book.curLine) || null;
+}
+function lineChapters(lineId) {
+  return book.chapters.filter(c => c.branchOf === lineId);
+}
+function summaryLine(ch, label) {
+  return label + (ch.title.trim() ? '《' + ch.title.trim() + '》' : '') + ':' +
+    (ch.summary.trim() || '(这一章还没整理摘要)');
+}
+function contextSummaryLines() {
+  const line = currentLine();
+  if (!line) {
+    return book.chapters.slice(0, book.cur).map((ch, i) => summaryLine(ch, '第' + (i + 1) + '章'));
+  }
+  const out = [];
+  for (let i = 0; i <= line.pos && i < book.chapters.length; i++) {
+    const ch = book.chapters[i];
+    if (ch.branchOf) continue;
+    out.push(summaryLine(ch, '第' + (i + 1) + '章'));
+  }
+  const bc = lineChapters(line.id);
+  const idx = bc.findIndex(ch => ch.id === curChapter().id);
+  bc.slice(0, idx < 0 ? bc.length : idx).forEach((ch, k) => {
+    out.push(summaryLine(ch, '支线「' + line.name + '」第' + (k + 1) + '章'));
+  });
+  return out;
+}
 
 function refreshIndexEntry() {
   if (!book) return;
@@ -1209,23 +1259,33 @@ function buildSystemPrompt() {
     }
   }
 
-  const prev = book.chapters.slice(0, book.cur);
-  if (prev.length) {
+  const lineNow = currentLine();
+  if (lineNow) {
+    parts.push('【世界线】当前在支线「' + lineNow.name + '」:它与主线从第 ' + (lineNow.pos + 1) +
+      ' 章之后分开,是一条独立的世界线。只参考主线到分叉点为止的内容,以及本支线自己的前文;不要引用主线后面的剧情,也不要引用其他支线。');
+  }
+  const sums = contextSummaryLines();
+  if (sums.length) {
     let budget = 7000;
     const picked = [];
-    for (let i = prev.length - 1; i >= 0; i--) {
-      const c = prev[i];
-      const line = '第' + (i + 1) + '章' + (c.title.trim() ? '《' + c.title.trim() + '》' : '') + ':' +
-        (c.summary.trim() ? c.summary.trim() : '(这一章还没整理摘要)');
-      if (budget - line.length < 0) break;
-      picked.unshift(line);
-      budget -= line.length;
+    for (let i = sums.length - 1; i >= 0; i--) {
+      if (budget - sums[i].length < 0) break;
+      picked.unshift(sums[i]);
+      budget -= sums[i].length;
     }
     parts.push('【前情提要】\n' + picked.join('\n'));
   }
 
-  const last = book.chapters[book.cur - 1];
-  if (last && last.body.trim()) parts.push('【上一章结尾】\n' + last.body.trim().slice(-1200));
+  let lastCh = null;
+  if (lineNow) {
+    const bc = lineChapters(lineNow.id);
+    const idx = bc.findIndex(ch => ch.id === curChapter().id);
+    lastCh = idx > 0 ? bc[idx - 1] : (book.chapters[lineNow.pos] || null);
+    if (lastCh && lastCh.branchOf) lastCh = null;
+  } else {
+    lastCh = book.chapters[book.cur - 1] || null;
+  }
+  if (lastCh && lastCh.body.trim()) parts.push('【上一章结尾】\n' + lastCh.body.trim().slice(-1200));
   if (book.autoNotes.trim()) parts.push('【设定补充记录】\n' + book.autoNotes.trim().slice(-4000));
 
   return parts.join('\n\n');
@@ -1273,9 +1333,7 @@ function checkMessages(c) {
   if (book.facts.trim()) parts.push('【必须遵守的事实】\n' + book.facts.trim());
   const cardsText = cardsPromptText(4000);
   if (cardsText) parts.push(cardsText);
-  const sums = book.chapters.slice(0, book.cur).map((x, i) =>
-    '第' + (i + 1) + '章' + (x.title.trim() ? '《' + x.title.trim() + '》' : '') + ':' + (x.summary.trim() || '(无摘要)')
-  );
+  const sums = contextSummaryLines();
   if (sums.length) parts.push('【前情提要】\n' + sums.join('\n'));
   let body = c.body.trim();
   if (body.length > 20000) body = body.slice(0, 9000) + '\n……(中间省略)……\n' + body.slice(-9000);
@@ -1304,9 +1362,7 @@ function fixMessages(c, issues) {
   const cardsText = cardsPromptText(3000);
   if (cardsText) parts.push(cardsText);
   if (book.styleGuide.trim()) parts.push('【文风指南】\n' + book.styleGuide.trim().slice(0, 2000));
-  const sums = book.chapters.slice(0, book.cur).map((x, i) =>
-    '第' + (i + 1) + '章:' + (x.summary.trim() || '(无摘要)')
-  );
+  const sums = contextSummaryLines();
   if (sums.length) parts.push('【前情提要】\n' + sums.join('\n'));
   parts.push('【审校意见】\n' + String(issues || '').trim());
   parts.push('【待修正的本章正文】\n' + c.body.slice(0, 16000));
@@ -1350,20 +1406,41 @@ function renderTop() {
 
 function renderWrite() {
   const c = curChapter();
+  const line = currentLine();
   const seal = $('#sealNum');
-  const cn = cnNum(book.cur + 1);
-  seal.textContent = cn;
-  seal.classList.toggle('small', cn.length >= 3);
+  if (line) {
+    const bc = lineChapters(line.id);
+    const k = Math.max(0, bc.findIndex(x => x.id === c.id));
+    const cnk = cnNum(k + 1);
+    seal.textContent = cnk;
+    seal.classList.toggle('small', cnk.length >= 3);
+    seal.style.background = '#7A7160';
+  } else {
+    const cn = cnNum(book.cur + 1);
+    seal.textContent = cn;
+    seal.classList.toggle('small', cn.length >= 3);
+    seal.style.background = '';
+  }
   $('#chTitle').value = c.title;
   $('#chBody').value = c.body;
   $('#reqText').value = c.req;
   $('#chSummary').value = c.summary;
-  $('#chNo').textContent = '第' + (book.cur + 1) + ' 章';
+  if (line) {
+    const bc = lineChapters(line.id);
+    const k = Math.max(0, bc.findIndex(x => x.id === c.id));
+    $('#chNo').textContent = line.name + ' · 第' + (k + 1) + ' 章';
+  } else {
+    $('#chNo').textContent = '第' + (book.cur + 1) + ' 章';
+  }
   $('#chWords').textContent = fmt(countWords(c.body)) + ' 字';
   if (!busy) $('#btnWrite').textContent = writeLabel();
   $('#btnStop').hidden = !busy;
   $('#btnUndoGen').hidden = !(c.gen && c.gen.text);
   $('#keyBanner').hidden = !!settings.apiKey.trim();
+  $('#branchBanner').hidden = !line;
+  if (line) {
+    $('#branchBannerText').textContent = '正在写支线「' + line.name + '」:与主线从第 ' + (line.pos + 1) + ' 章之后分开。';
+  }
 
   const total = book.chapters.reduce((s, ch) => s + countWords(ch.body), 0);
   const last = settings.lastBackup || 0;
@@ -1386,21 +1463,56 @@ function renderWrite() {
 function renderTOC() {
   const wrap = $('#tocList');
   wrap.innerHTML = '';
+
+  const groups = {};
+  (book.lines || []).forEach(l => { groups[l.id] = { line: l, rows: [], done: false }; });
   book.chapters.forEach((c, i) => {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'ch-row' + (i === book.cur ? ' cur' : '');
+    if (c.branchOf && groups[c.branchOf]) groups[c.branchOf].rows.push({ c, i });
+  });
+
+  const rows = [];
+  book.chapters.forEach((c, i) => {
+    if (c.branchOf) return;
+    rows.push({ c, i, branch: null });
+    (book.lines || []).forEach(l => {
+      if (l.pos === i && groups[l.id]) {
+        groups[l.id].rows.forEach(r => rows.push({ c: r.c, i: r.i, branch: l }));
+        groups[l.id].done = true;
+      }
+    });
+  });
+  (book.lines || []).forEach(l => {
+    const g = groups[l.id];
+    if (g && !g.done) g.rows.forEach(r => rows.push({ c: r.c, i: r.i, branch: l }));
+  });
+
+  rows.forEach(row => {
+    const c = row.c;
+    const i = row.i;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ch-row' + (i === book.cur ? ' cur' : '');
     const title = c.title.trim();
-    row.innerHTML =
-      '<span class="t">第' + (i + 1) + '章' + (title ? '　' + escapeHtml(title) : '') + '</span>' +
+    let label;
+    if (row.branch) {
+      const bc = lineChapters(row.branch.id);
+      const k = Math.max(0, bc.findIndex(x => x.id === c.id));
+      label = '<span class="btag">' + escapeHtml(row.branch.name) + '</span>第' + (k + 1) + '章' +
+        (title ? '　' + escapeHtml(title) : '');
+    } else {
+      label = '第' + (i + 1) + '章' + (title ? '　' + escapeHtml(title) : '');
+    }
+    btn.innerHTML =
+      '<span class="t">' + label + '</span>' +
       '<span class="m">' + (c.summary.trim() ? '有摘要　' : '') + fmt(countWords(c.body)) + ' 字</span>';
-    row.addEventListener('click', () => {
+    btn.addEventListener('click', () => {
       book.cur = i;
+      book.curLine = row.branch ? row.branch.id : null;
       saveBookSoon();
       renderTop();
       switchTab('write');
     });
-    wrap.appendChild(row);
+    wrap.appendChild(btn);
   });
 }
 
@@ -2379,32 +2491,105 @@ async function applyFix(issues) {
 
 function addChapter() {
   if (busy) return;
-  book.chapters.push(blankChapter());
+  const line = currentLine();
+  const c = blankChapter();
+  if (line) c.branchOf = line.id;
+  book.chapters.push(c);
   book.cur = book.chapters.length - 1;
   saveBookSoon();
   renderTop();
   renderTOC();
   switchTab('write');
-  toast('新建了第' + book.chapters.length + '章');
+  toast(line ? ('在「' + line.name + '」里新建了一章') : ('新建了第' + book.chapters.length + '章'));
   scheduleSync(15000);
 }
 
 async function deleteChapter() {
   if (busy) return;
+  const branchId = curChapter().branchOf || '';
   if (book.chapters.length === 1) {
     const ok = await confirmSheet('清空这一章?', '这本书目前只有这一章。清空后正文和摘要都会消失,建议先导出备份。');
     if (!ok) return;
     book.chapters[0] = blankChapter();
     book.cur = 0;
+    book.curLine = null;
   } else {
-    const ok = await confirmSheet('删除第' + (book.cur + 1) + '章?', '这一章的正文和摘要会一起删掉,无法恢复。建议先导出备份。');
+    const where = branchId ? '这条支线的这一章' : ('第' + (book.cur + 1) + '章');
+    const ok = await confirmSheet('删除' + where + '?', '这一章的正文和摘要会一起删掉,无法恢复。建议先导出备份。');
     if (!ok) return;
     book.chapters.splice(book.cur, 1);
     book.cur = Math.min(book.cur, book.chapters.length - 1);
+    if (branchId && !book.chapters.some(x => x.branchOf === branchId)) {
+      book.lines = (book.lines || []).filter(l => l.id !== branchId);
+      if (book.curLine === branchId) book.curLine = null;
+    }
   }
   await saveBookNow();
   renderAll();
   toast('已删除');
+}
+
+async function createBranch() {
+  if (busy) return;
+  const here = currentLine();
+  if (here) {
+    showSheet({
+      title: '支线里暂时不再分叉',
+      text: '想要另一种可能,回主线到分叉的那一章,再点「从本章分一支」。支线之间是平行的,不会互相引用。',
+      actions: [
+        { label: '回主线', primary: true, onClick: () => switchLine(null) },
+        { label: '知道了' }
+      ]
+    });
+    return;
+  }
+  const c = curChapter();
+  const n = (book.lines || []).length + 1;
+  const line = {
+    id: uid('ln'),
+    name: '支线' + cnNum(n),
+    from: c.id,
+    pos: book.cur,
+    createdAt: Date.now()
+  };
+  book.lines = book.lines || [];
+  book.lines.push(line);
+  const copy = {
+    id: uid('c'),
+    title: c.title,
+    body: c.body,
+    summary: c.summary,
+    req: c.req,
+    history: [],
+    gen: null,
+    branchOf: line.id
+  };
+  book.chapters.push(copy);
+  book.cur = book.chapters.length - 1;
+  book.curLine = line.id;
+  await saveBookNow();
+  renderAll();
+  switchTab('write');
+  toast('开了一条「' + line.name + '」,从这里改不影响主线');
+}
+
+async function switchLine(id) {
+  if (busy) return;
+  await saveBookNow();
+  if (!id) {
+    const c = curChapter();
+    const line = c.branchOf ? (book.lines || []).find(l => l.id === c.branchOf) : null;
+    book.curLine = null;
+    if (line) book.cur = Math.min(line.pos, book.chapters.length - 1);
+  } else {
+    const idx = book.chapters.findIndex(c => c.branchOf === id);
+    if (idx < 0) return;
+    book.curLine = id;
+    book.cur = idx;
+  }
+  await saveBookNow();
+  renderAll();
+  switchTab('write');
 }
 
 /* ================= 书籍管理 ================= */
@@ -2490,7 +2675,8 @@ async function duplicateBook(entry) {
   copy.chapters = copy.chapters.map(c => ({
     id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req,
     history: Array.isArray(c.history) ? c.history : [],
-    gen: c.gen || null
+    gen: c.gen || null,
+    branchOf: c.branchOf || ''
   }));
   copy.refs = [];
   copy.cards = (copy.cards || []).map(k => ({
@@ -2903,7 +3089,12 @@ function bookToTxt(bk) {
   }
   lines.push('');
   bk.chapters.forEach((c, i) => {
-    lines.push('第' + (i + 1) + '章' + (c.title.trim() ? '　' + c.title.trim() : ''), '');
+    if (c.branchOf) {
+      const ln = (bk.lines || []).find(l => l.id === c.branchOf);
+      lines.push('【支线 · ' + (ln ? ln.name : '未命名') + '】' + (c.title.trim() || ''), '');
+    } else {
+      lines.push('第' + (i + 1) + '章' + (c.title.trim() ? '　' + c.title.trim() : ''), '');
+    }
     lines.push((c.body || '').trim(), '');
   });
   return lines.join('\n');
@@ -2975,7 +3166,7 @@ function importBackupFile(file) {
         const nb = normalizeBook(raw);
         nb.id = uid('b');
         nb.title = nb.title || '导入的作品';
-        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req, history: Array.isArray(c.history) ? c.history : [], gen: c.gen || null }));
+        nb.chapters = nb.chapters.map(c => ({ id: uid('c'), title: c.title, body: c.body, summary: c.summary, req: c.req, history: Array.isArray(c.history) ? c.history : [], gen: c.gen || null, branchOf: c.branchOf || '' }));
         if (Array.isArray(nb.refs) && nb.refs.length) {
           if (!Array.isArray(nb.refIds)) nb.refIds = [];
           nb.refs.forEach(r => {
@@ -3074,6 +3265,18 @@ function bind() {
   $('#btnAddCh').addEventListener('click', addChapter);
   $('#btnDelCh').addEventListener('click', deleteChapter);
   $('#btnQuickCard').addEventListener('click', quickAddCard);
+  $('#btnBranch').addEventListener('click', createBranch);
+  $('#bannerBranchBack').addEventListener('click', () => switchLine(null));
+  $('#bannerBranchRename').addEventListener('click', async () => {
+    const line = currentLine();
+    if (!line) return;
+    const name = await promptSheet('给这条线改名', line.name, '例如:黑化线 / 正义线');
+    if (name === null || !name) return;
+    line.name = name.slice(0, 20);
+    await saveBookNow();
+    renderAll();
+    toast('改好了');
+  });
 
   const bindBookField = (sel, key) => {
     $(sel).addEventListener('input', e => {
