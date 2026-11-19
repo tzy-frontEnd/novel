@@ -405,13 +405,18 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
 
     <div class="section-title">写作偏好</div>
     <div class="grid2">
-      <div class="field">
+      <div class="field" style="grid-column:1 / -1">
         <label for="pPerson">叙述视角</label>
-        <select id="pPerson">
-          <option>第三人称限知</option>
-          <option>第三人称全知</option>
-          <option>第一人称</option>
-        </select>
+        <input id="pPerson" list="pPersonList" autocapitalize="off" placeholder="例如:第三人称限知;或写“自由转换”">
+        <datalist id="pPersonList">
+          <option value="第三人称限知"></option>
+          <option value="第三人称全知"></option>
+          <option value="第一人称"></option>
+          <option value="第二人称"></option>
+          <option value="自由转换:按场景在第一人称与第三人称之间切换"></option>
+          <option value="每章开头第一人称独白,正文第三人称限知"></option>
+        </datalist>
+        <p class="note" style="margin:6px 0 0">可以随便填。想一段内换视角,就写“自由转换”,再在「本章要求」里说明从哪一段换、换成谁的口吻。</p>
       </div>
       <div class="field">
         <label for="pPara">段落节奏</label>
@@ -440,6 +445,7 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
       <div class="field">
         <label for="pEnd">本章结尾</label>
         <select id="pEnd">
+          <option>自然结束</option>
           <option>留悬念</option>
           <option>收束本章</option>
           <option>留白</option>
@@ -520,6 +526,28 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
         <option value="max">最高(最稳,适合理大纲、查矛盾)</option>
       </select>
       <p class="note">开思考时,模型先在内心打草稿再写,更稳但更慢更费。日常写正文选「关闭」;点「检查一致」前切到「高」或「最高」更准。</p>
+    </div>
+    <div class="field">
+      <label for="stylePreset">文风倾向</label>
+      <select id="stylePreset">
+        <option value="natural">自然(推荐)</option>
+        <option value="literary">文学一点</option>
+        <option value="web">网文节奏</option>
+      </select>
+    </div>
+    <label class="check">
+      <input id="naturalMode" type="checkbox">
+      <span>自然写作模式:少给指令,只给必要设定,像作者本人接着写(更容易摆脱 AI 腔)</span>
+    </label>
+    <div class="field">
+      <label for="prevChars">续写时带上前文 <span id="prevCharsVal">3500</span> 字</label>
+      <input id="prevChars" type="range" min="800" max="8000" step="200">
+      <p class="note">带得越多,笔感越连贯;太长会拖慢、也更贵。一般 2500–4000。</p>
+    </div>
+    <div class="field">
+      <label for="freqPenalty">重复用词抑制 <span id="freqPenaltyVal">0.3</span></label>
+      <input id="freqPenalty" type="range" min="0" max="1" step="0.1">
+      <p class="note">减少反复用同一个词和句式,0.2–0.4 比较自然;开思考时这项不生效。</p>
     </div>
     <div class="field">
       <label for="modelCustom">其他模型名(可选)</label>
@@ -810,6 +838,11 @@ const DEFAULT_SETTINGS = {
   maxTokens: 4000,
   lastBackup: 0,
   readFont: 18,
+  naturalMode: true,
+  stylePreset: 'natural',
+  prevChars: 3500,
+  freqPenalty: 0.3,
+  presPenalty: 0.3,
   ghUser: '',
   ghRepo: '',
   ghBranch: 'main',
@@ -851,6 +884,11 @@ async function loadSettings() {
   settings.maxTokens = Number(settings.maxTokens) || DEFAULT_SETTINGS.maxTokens;
   settings.lastBackup = Number(settings.lastBackup) || 0;
   settings.readFont = Number(settings.readFont) || 18;
+  if (typeof settings.naturalMode !== 'boolean') settings.naturalMode = true;
+  if (typeof settings.stylePreset !== 'string') settings.stylePreset = 'natural';
+  settings.prevChars = Math.min(8000, Math.max(800, Number(settings.prevChars) || 3500));
+  settings.freqPenalty = Math.min(1, Math.max(0, Number(settings.freqPenalty)));
+  settings.presPenalty = Math.min(1, Math.max(0, Number(settings.presPenalty)));
   ['ghUser', 'ghRepo', 'ghBranch', 'ghToken'].forEach(k => {
     if (typeof settings[k] !== 'string') settings[k] = DEFAULT_SETTINGS[k];
   });
@@ -885,7 +923,7 @@ let refTombstones = [];
 function blankChapter() { return { id: uid('c'), title: '', body: '', summary: '', req: '', history: [], gen: null, branchOf: '' }; }
 const CARD_TYPES = { character: '人物卡', world: '世界观', rule: '设定 / 规则', place: '地点 / 物品' };
 function blankPrefs() {
-  return { person: '第三人称限知', para: '长短交错', dialog: '适中', detail: '适中', ending: '留悬念', avoid: '' };
+  return { person: '第三人称限知', para: '长短交错', dialog: '适中', detail: '适中', ending: '自然结束', avoid: '' };
 }
 function newBookObj(title) {
   return {
@@ -1189,6 +1227,8 @@ async function callAPI(messages, opts) {
   const think = o.thinking || settings.thinking || 'off';
   if (think === 'off') {
     body.thinking = { type: 'disabled' };
+    body.frequency_penalty = Number(settings.freqPenalty) || 0;
+    body.presence_penalty = Number(settings.presPenalty) || 0;
   } else {
     body.thinking = { type: 'enabled' };
     body.reasoning_effort = think;
@@ -1273,25 +1313,47 @@ function prefsLines() {
   const p = book.prefs || {};
   const out = [];
   if (p.person) out.push('叙述视角:' + p.person);
+  if (/自由|切换|交替/.test(p.person || '')) {
+    out.push('视角可以切换,但同一场景之内保持一致;切换处单独成段,不要在一句里跳视角。');
+  }
   if (p.para) out.push('段落:' + p.para);
   if (p.dialog) out.push('对话:' + p.dialog);
   if (p.detail) out.push('描写:' + p.detail);
-  if (p.ending) out.push('本章结尾:' + p.ending);
+  if (p.ending === '自然结束') out.push('本章结尾:场景自然收住,不要刻意停在悬念上,也不要升华总结');
+  else if (p.ending) out.push('本章结尾:' + p.ending);
   if ((p.avoid || '').trim()) out.push('不要出现:' + p.avoid.trim());
   return out;
 }
 
+function stylePresetLine() {
+  const p = settings.stylePreset;
+  if (p === 'natural') return '语言自然,像人说话一样有松紧;少用形容词和比喻,不堆排比。';
+  if (p === 'literary') return '文学性稍强,描写讲究但克制,避免陈词滥调。';
+  if (p === 'web') return '节奏快,以对话和行动推进,少废话,别停在无关细节上。';
+  return '';
+}
+
 function buildSystemPrompt() {
   const parts = [];
-  parts.push('你是一位中文小说家,正在为读者连载一部长篇小说。');
-  parts.push('写作要求:\n' +
-    '- 只输出小说正文,不要写章节标题,不要解释,不要用 markdown,不要出现「本章完」「未完待续」之类的话。\n' +
-    '- 用具体的场景、动作、对话和细节推进故事,不写概述和总结。\n' +
-    '- 人物的言行要符合设定,情节、时间线、称呼和前文保持一致。\n' +
-    '- 段落之间空一行,对话使用中文引号。');
-
-  const prefs = prefsLines();
-  if (prefs.length) parts.push('【写作偏好】\n' + prefs.join('\n'));
+  if (settings.naturalMode) {
+    parts.push('你是一位中文小说作者,正在写一部长篇小说。请顺着已有的故事往下写,像作者本人接着写稿,而不是像助手完成任务。');
+    parts.push('写作要求:\n' +
+      '- 只输出小说正文:不要章节标题、不要说明、不要用 markdown、不要出现「本章完」「未完待续」。\n' +
+      '- 语言要自然:句子长短错落,段落有松紧;不要每段都总结,不要连续打比方,不要「仿佛……一般」这类套话。\n' +
+      '- 接着上文的语气、人称和节奏写,人物说话各有各的口吻。\n' +
+      '- 你是在续写,不是在复述大纲:多写动作、对话和场景,少解释心理。');
+    const preset = stylePresetLine();
+    if (preset) parts.push('文风:' + preset);
+  } else {
+    parts.push('你是一位中文小说家,正在为读者连载一部长篇小说。');
+    parts.push('写作要求:\n' +
+      '- 只输出小说正文,不要写章节标题,不要解释,不要用 markdown,不要出现「本章完」「未完待续」之类的话。\n' +
+      '- 用具体的场景、动作、对话和细节推进故事,不写概述和总结。\n' +
+      '- 人物的言行要符合设定,情节、时间线、称呼和前文保持一致。\n' +
+      '- 段落之间空一行,对话使用中文引号。');
+    const prefs = prefsLines();
+    if (prefs.length) parts.push('【写作偏好】\n' + prefs.join('\n'));
+  }
   if (book.genre.trim()) parts.push('作品类型:' + book.genre.trim());
   if (book.style.trim()) parts.push('额外文风要求:' + book.style.trim());
   if (book.bible.trim()) parts.push('【作品设定】\n' + book.bible.trim());
@@ -1319,14 +1381,18 @@ function buildSystemPrompt() {
   }
   const sums = contextSummaryLines();
   if (sums.length) {
-    let budget = 7000;
-    const picked = [];
-    for (let i = sums.length - 1; i >= 0; i--) {
-      if (budget - sums[i].length < 0) break;
-      picked.unshift(sums[i]);
-      budget -= sums[i].length;
+    if (settings.naturalMode) {
+      parts.push('【前情(简)】\n' + sums.slice(-2).join('\n'));
+    } else {
+      let budget = 7000;
+      const picked = [];
+      for (let i = sums.length - 1; i >= 0; i--) {
+        if (budget - sums[i].length < 0) break;
+        picked.unshift(sums[i]);
+        budget -= sums[i].length;
+      }
+      parts.push('【前情提要】\n' + picked.join('\n'));
     }
-    parts.push('【前情提要】\n' + picked.join('\n'));
   }
 
   let lastCh = null;
@@ -1338,7 +1404,10 @@ function buildSystemPrompt() {
   } else {
     lastCh = book.chapters[book.cur - 1] || null;
   }
-  if (lastCh && lastCh.body.trim()) parts.push('【上一章结尾】\n' + lastCh.body.trim().slice(-1200));
+  if (lastCh && lastCh.body.trim()) {
+    const keep = Math.max(800, Number(settings.prevChars) || 3500);
+    parts.push('【上一章结尾】\n' + lastCh.body.trim().slice(-keep));
+  }
   if (book.autoNotes.trim()) parts.push('【设定补充记录】\n' + book.autoNotes.trim().slice(-4000));
 
   return parts.join('\n\n');
@@ -1349,15 +1418,17 @@ function writeMessages(c) {
   const title = c.title.trim() ? '《' + c.title.trim() + '》' : '';
   const req = c.req.trim();
   let user;
+  const natural = !!settings.naturalMode;
   if (!c.body.trim()) {
     user = '请写第' + n + '章' + title + '的正文。\n' +
-      '本章要求:' + (req || '顺着前文自然推进情节,结尾留下让人想读下一章的钩子') + '。\n' +
+      '本章要求:' + (req || (natural ? '接着上一章结束的地方往下写,该发生什么就发生什么,不必刻意停在悬念上' : '顺着前文自然推进情节,结尾留下让人想读下一章的钩子')) + '。\n' +
       '篇幅约 ' + settings.targetWords + ' 字。';
   } else {
-    const tail = c.body.slice(-1600);
-    user = '下面是第' + n + '章已经写好的结尾部分:\n---\n' + tail + '\n---\n' +
-      '请直接接着往下写,不要重复已有内容,不要概括前文,篇幅约 ' + Math.round(settings.targetWords / 2) + ' 字。\n' +
-      '本章要求:' + (req || '继续推进情节,保持人物和氛围一致') + '。';
+    const keep = Math.max(800, Number(settings.prevChars) || 3500);
+    const tail = c.body.slice(-keep);
+    user = '下面是这一章已经写好的部分:\n---\n' + tail + '\n---\n' +
+      '请接着往下写,不要重复上面的内容,不要重新交代前情,篇幅约 ' + Math.round(settings.targetWords / 2) + ' 字。\n' +
+      '本章要求:' + (req || (natural ? '顺着现在的场景往下走,保持刚才那种笔感' : '继续推进情节,保持人物和氛围一致')) + '。';
   }
   return [
     { role: 'system', content: buildSystemPrompt() },
@@ -2370,6 +2441,12 @@ function renderSettings() {
   }
   sel.value = settings.model;
   $('#thinking').value = settings.thinking;
+  $('#stylePreset').value = settings.stylePreset;
+  $('#naturalMode').checked = !!settings.naturalMode;
+  $('#prevChars').value = String(settings.prevChars);
+  $('#prevCharsVal').textContent = String(settings.prevChars);
+  $('#freqPenalty').value = String(settings.freqPenalty);
+  $('#freqPenaltyVal').textContent = Number(settings.freqPenalty).toFixed(1);
   $('#modelCustom').value = settings.modelCustom;
   $('#sendImages').checked = !!settings.sendImages;
   $('#temp').value = String(settings.temperature);
@@ -3461,10 +3538,13 @@ function bind() {
   bindBookField('#styleGuide', 'styleGuide');
 
   const bindPref = (sel, key) => {
-    $(sel).addEventListener('change', e => {
+    const el = $(sel);
+    const handler = e => {
       book.prefs[key] = e.target.value;
       saveBookSoon();
-    });
+    };
+    el.addEventListener('change', handler);
+    el.addEventListener('input', handler);
   };
   bindPref('#pPerson', 'person');
   bindPref('#pPara', 'para');
@@ -3512,6 +3592,24 @@ function bind() {
     settings.thinking = e.target.value;
     saveSettings();
     renderReqPreview();
+  });
+  $('#stylePreset').addEventListener('change', e => {
+    settings.stylePreset = e.target.value;
+    saveSettings();
+  });
+  $('#naturalMode').addEventListener('change', e => {
+    settings.naturalMode = !!e.target.checked;
+    saveSettings();
+  });
+  $('#prevChars').addEventListener('input', e => {
+    settings.prevChars = parseInt(e.target.value, 10) || 3500;
+    $('#prevCharsVal').textContent = String(settings.prevChars);
+    saveSettings();
+  });
+  $('#freqPenalty').addEventListener('input', e => {
+    settings.freqPenalty = parseFloat(e.target.value);
+    $('#freqPenaltyVal').textContent = settings.freqPenalty.toFixed(1);
+    saveSettings();
   });
   $('#modelCustom').addEventListener('input', e => {
     settings.modelCustom = e.target.value;
