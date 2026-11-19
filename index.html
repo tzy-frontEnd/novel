@@ -172,7 +172,7 @@ input[type=range]{background:transparent;border:0;padding:4px 0;accent-color:var
 .toc-hint{font-size:12px;color:var(--ink3);line-height:1.6;margin:0 0 4px}
 
 .shelf-row{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  display:block;
   border:1px solid var(--rule);background:var(--sheet);
   border-radius:var(--radius);padding:14px;margin:0 0 10px;
 }
@@ -180,7 +180,7 @@ input[type=range]{background:transparent;border:0;padding:4px 0;accent-color:var
 .shelf-main{min-width:0}
 .shelf-main .st{font-family:var(--serif);font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shelf-main .sm{font-size:12px;color:var(--ink3);margin-top:4px;font-variant-numeric:tabular-nums}
-.shelf-btns{display:flex;gap:2px;flex-shrink:0;align-items:center}
+.shelf-btns{display:flex;gap:4px;align-items:center;justify-content:flex-end;margin-top:8px}
 
 .ref-row{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -207,6 +207,31 @@ input[type=range]{background:transparent;border:0;padding:4px 0;accent-color:var
 .thumb-add{width:72px;height:72px;border:1px dashed var(--rule);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2);cursor:pointer;background:var(--sheet)}
 #sheetField img{max-width:100%;max-height:52vh;display:block;margin:0 auto;border-radius:8px;border:1px solid var(--rule)}
 .actions-sub{margin-top:-4px}
+.create-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px}
+.create-bar .cb-title{font-family:var(--serif);font-size:15px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.read-tools{display:flex;gap:8px;align-items:center;margin:0 0 14px}
+.read-tools .hint{margin-left:auto}
+.read-content{
+  background:var(--sheet);
+  border:1px solid var(--rule);
+  border-radius:var(--radius);
+  padding:22px 18px 28px;
+  font-family:var(--serif);
+  font-size:var(--read-fs,18px);
+  line-height:2.05;
+  color:var(--ink);
+}
+.read-content .rc-chapter{
+  margin:0 0 18px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--rule);
+  font-size:calc(var(--read-fs,18px) + 3px);
+  font-weight:600;
+  scroll-margin-top:72px;
+}
+.read-content .rc-chapter:not(:first-child){margin-top:36px}
+.read-content p{margin:0 0 1.1em;text-indent:2em}
+.read-content .rc-empty{color:var(--ink3);font-size:14px;text-align:center;padding:24px 0;text-indent:0}
 .look-box{margin:2px 0 10px}
 .look-box label{display:block;font-size:12px;color:var(--ink2);margin-bottom:6px}
 .look-box textarea{margin:0 0 8px;font-size:14px;line-height:1.7}
@@ -227,8 +252,7 @@ nav#tabbar{
   border-top:1px solid var(--rule);
   padding-bottom:env(safe-area-inset-bottom);
   z-index:40;
-}
-nav button{
+}nav button{
   position:relative;
   background:none;border:0;color:var(--ink2);
   font:inherit;font-size:12.5px;
@@ -279,7 +303,14 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
 </header>
 
 <main>
-  <section id="tab-write" class="tab active">
+  <section id="tab-write" class="tab">
+    <div class="create-bar">
+      <span id="createBarTitle" class="cb-title">《未命名作品》</span>
+      <span style="white-space:nowrap">
+        <button id="btnOpenToc" class="btn btn-ghost btn-sm" type="button">目录</button>
+        <button id="btnSwitchBook" class="btn btn-ghost btn-sm" type="button">换一本</button>
+      </span>
+    </div>
     <div id="keyBanner" class="banner" hidden>
       <span>还没填 DeepSeek API Key,现在只能手动写。</span>
       <button id="bannerKeyGo" class="link" type="button">去填</button>
@@ -340,15 +371,16 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
   </section>
 
   <section id="tab-toc" class="tab">
-    <p class="toc-hint">点一章跳过去。想要“另一种可能”:切到分叉的那一章,点下面的「从本章分一支」,系统会复制这一章、单独开一条线,主线一个字都不会动。写完一章记得存摘要。</p>
-    <div class="actions" style="margin-bottom:6px">
+    <div class="actions" style="margin-bottom:10px">
+      <button id="btnBackToWrite" class="btn btn-ghost btn-sm" type="button">← 返回正文</button>
       <button id="btnBranch" class="btn btn-ghost btn-sm" type="button">从本章分一支</button>
     </div>
+    <p class="toc-hint">点一章跳过去。想要“另一种可能”:切到分叉的那一章,点「从本章分一支」,会复制这一章、单独开一条世界线,主线一个字都不会动。写完一章记得存摘要。</p>
     <div id="tocList"></div>
     <button id="btnAddCh" class="btn btn-ghost" type="button" style="width:100%;margin-top:18px">新建一章</button>
   </section>
 
-  <section id="tab-shelf" class="tab">
+  <section id="tab-shelf" class="tab active">
     <button id="btnNewBook" class="btn btn-primary" type="button" style="width:100%">写一本新的</button>
     <div id="shelfList" style="margin-top:14px"></div>
     <p class="note">每本书的章节、设定、范本各存各的,互不干扰。</p>
@@ -589,12 +621,28 @@ nav button.on::before{content:"";position:absolute;top:-1px;left:24%;right:24%;h
 
     <button id="btnClear" class="btn btn-text danger" type="button" style="margin-top:8px">清空全部数据</button>
   </section>
+  <section id="tab-read" class="tab">
+    <div class="field" style="margin-bottom:10px">
+      <label for="readLine">世界线</label>
+      <select id="readLine"></select>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label for="readChapter">跳到</label>
+      <select id="readChapter"></select>
+    </div>
+    <div class="read-tools">
+      <button id="readFontMinus" class="btn btn-ghost btn-sm" type="button">A−</button>
+      <button id="readFontPlus" class="btn btn-ghost btn-sm" type="button">A＋</button>
+      <span id="readMeta" class="hint"></span>
+    </div>
+    <article id="readContent" class="read-content"></article>
+  </section>
 </main>
 
 <nav id="tabbar">
-  <button type="button" data-tab="write" class="on">正文</button>
-  <button type="button" data-tab="toc">目录</button>
-  <button type="button" data-tab="shelf">书架</button>
+  <button type="button" data-tab="shelf" class="on">书架</button>
+  <button type="button" data-tab="write">创作</button>
+  <button type="button" data-tab="read">阅读</button>
   <button type="button" data-tab="bible">设定</button>
   <button type="button" data-tab="set">设置</button>
 </nav>
@@ -761,6 +809,7 @@ const DEFAULT_SETTINGS = {
   targetWords: 1200,
   maxTokens: 4000,
   lastBackup: 0,
+  readFont: 18,
   ghUser: '',
   ghRepo: '',
   ghBranch: 'main',
@@ -801,6 +850,7 @@ async function loadSettings() {
   settings.targetWords = Number(settings.targetWords) || DEFAULT_SETTINGS.targetWords;
   settings.maxTokens = Number(settings.maxTokens) || DEFAULT_SETTINGS.maxTokens;
   settings.lastBackup = Number(settings.lastBackup) || 0;
+  settings.readFont = Number(settings.readFont) || 18;
   ['ghUser', 'ghRepo', 'ghBranch', 'ghToken'].forEach(k => {
     if (typeof settings[k] !== 'string') settings[k] = DEFAULT_SETTINGS[k];
   });
@@ -903,6 +953,8 @@ function normalizeBook(b) {
       createdAt: Number(l.createdAt) || Date.now()
     })) : [];
     out.curLine = (typeof b.curLine === 'string' && out.lines.some(l => l.id === b.curLine)) ? b.curLine : null;
+    out.readLine = (typeof b.readLine === 'string') ? b.readLine : '';
+    out.readIndex = Math.max(0, parseInt(b.readIndex, 10) || 0);
     const ci = parseInt(b.cur, 10);
     out.cur = Math.min(Math.max(0, isNaN(ci) ? 0 : ci), out.chapters.length - 1);
     out.createdAt = Number(b.createdAt) || Date.now();
@@ -1437,6 +1489,7 @@ function renderWrite() {
   $('#btnStop').hidden = !busy;
   $('#btnUndoGen').hidden = !(c.gen && c.gen.text);
   $('#keyBanner').hidden = !!settings.apiKey.trim();
+  $('#createBarTitle').textContent = (book.title || '').trim() ? '《' + book.title.trim() + '》' : '《未命名作品》';
   $('#branchBanner').hidden = !line;
   if (line) {
     $('#branchBannerText').textContent = '正在写支线「' + line.name + '」:与主线从第 ' + (line.pos + 1) + ' 章之后分开。';
@@ -1535,22 +1588,108 @@ function renderShelf() {
     main.appendChild(m);
     const btns = document.createElement('div');
     btns.className = 'shelf-btns';
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'btn btn-ghost btn-sm';
-    open.textContent = '打开';
-    open.addEventListener('click', () => openBook(entry.id));
+    const cont = document.createElement('button');
+    cont.type = 'button';
+    cont.className = 'btn btn-ghost btn-sm';
+    cont.textContent = '继续写';
+    cont.addEventListener('click', () => openBook(entry.id));
+    const rd = document.createElement('button');
+    rd.type = 'button';
+    rd.className = 'btn btn-text btn-sm';
+    rd.textContent = '阅读';
+    rd.addEventListener('click', () => openForRead(entry.id));
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'btn btn-text btn-sm';
     more.textContent = '更多';
     more.addEventListener('click', () => bookMenu(entry));
-    btns.appendChild(open);
+    btns.appendChild(cont);
+    btns.appendChild(rd);
     btns.appendChild(more);
     row.appendChild(main);
     row.appendChild(btns);
     wrap.appendChild(row);
   });
+}
+
+function readChaptersOf(lineId) {
+  return lineId ? book.chapters.filter(c => c.branchOf === lineId) : book.chapters.filter(c => !c.branchOf);
+}
+
+function renderRead(scrollTo) {
+  const sel = $('#readLine');
+  if (!sel) return;
+  const validLine = (typeof book.readLine === 'string' &&
+    (book.readLine === '' || (book.lines || []).some(l => l.id === book.readLine))) ? book.readLine : '';
+  const opts = [{ v: '', t: '主线' }].concat((book.lines || []).map(l => ({ v: l.id, t: l.name })));
+  sel.innerHTML = '';
+  opts.forEach(o => {
+    const op = document.createElement('option');
+    op.value = o.v;
+    op.textContent = o.t;
+    sel.appendChild(op);
+  });
+  sel.value = validLine;
+
+  const chapters = readChaptersOf(validLine);
+  const cs = $('#readChapter');
+  cs.innerHTML = '';
+  chapters.forEach((ch, i) => {
+    const op = document.createElement('option');
+    op.value = String(i);
+    op.textContent = '第' + (i + 1) + '章' + (ch.title.trim() ? '　' + ch.title.trim() : '');
+    cs.appendChild(op);
+  });
+  const idx = Math.min(Math.max(0, Number(book.readIndex) || 0), Math.max(0, chapters.length - 1));
+  if (chapters.length) cs.value = String(idx);
+
+  const wrap = $('#readContent');
+  wrap.innerHTML = '';
+  wrap.style.setProperty('--read-fs', (Number(settings.readFont) || 18) + 'px');
+  let words = 0;
+  chapters.forEach((ch, i) => {
+    words += countWords(ch.body);
+    const h = document.createElement('h3');
+    h.className = 'rc-chapter';
+    h.id = 'rc-' + i;
+    h.textContent = '第' + (i + 1) + '章' + (ch.title.trim() ? '　' + ch.title.trim() : '');
+    wrap.appendChild(h);
+    const body = (ch.body || '').trim();
+    if (!body) {
+      const p = document.createElement('p');
+      p.className = 'rc-empty';
+      p.textContent = '(这一章还没有正文)';
+      wrap.appendChild(p);
+      return;
+    }
+    body.split(/\n+/).forEach(par => {
+      const p = document.createElement('p');
+      p.textContent = par;
+      wrap.appendChild(p);
+    });
+  });
+  if (!chapters.length) {
+    wrap.innerHTML = '<p class="rc-empty">这条世界线还没有章节。</p>';
+  }
+  $('#readMeta').textContent = chapters.length + ' 章 · ' + fmt(words) + ' 字';
+
+  if (scrollTo && chapters.length) {
+    const el = document.getElementById('rc-' + idx);
+    if (el) setTimeout(() => el.scrollIntoView({ block: 'start' }), 60);
+  }
+}
+
+function adjustReadFont(delta) {
+  const cur = Number(settings.readFont) || 18;
+  settings.readFont = Math.min(26, Math.max(14, cur + delta));
+  saveSettings();
+  renderRead(false);
+}
+
+async function openForRead(id) {
+  if (busy) { toast('等这次生成结束再切换'); return; }
+  if (id !== bookId) await openBook(id);
+  switchTab('read');
 }
 
 function renderBible() {
@@ -2260,10 +2399,12 @@ function renderAll() {
 
 function switchTab(name) {
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
-  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  const navKey = name === 'toc' ? 'write' : name;
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === navKey));
   if (name === 'write') renderWrite();
   if (name === 'toc') renderTOC();
   if (name === 'shelf') renderShelf();
+  if (name === 'read') renderRead(true);
   if (name === 'bible') renderBible();
   if (name === 'set') renderSettings();
   window.scrollTo(0, 0);
@@ -3398,6 +3539,22 @@ function bind() {
   $('#btnClear').addEventListener('click', clearAll);
   $('#bannerKeyGo').addEventListener('click', () => switchTab('set'));
   $('#bannerBackupGo').addEventListener('click', () => switchTab('set'));
+  $('#btnOpenToc').addEventListener('click', () => switchTab('toc'));
+  $('#btnSwitchBook').addEventListener('click', () => switchTab('shelf'));
+  $('#btnBackToWrite').addEventListener('click', () => switchTab('write'));
+  $('#readLine').addEventListener('change', e => {
+    book.readLine = e.target.value;
+    book.readIndex = 0;
+    saveBookSoon();
+    renderRead(true);
+  });
+  $('#readChapter').addEventListener('change', e => {
+    book.readIndex = Number(e.target.value) || 0;
+    saveBookSoon();
+    renderRead(true);
+  });
+  $('#readFontMinus').addEventListener('click', () => adjustReadFont(-2));
+  $('#readFontPlus').addEventListener('click', () => adjustReadFont(2));
 
   $('#sheet').addEventListener('click', e => {
     if (e.target === $('#sheet')) hideSheet();
@@ -3448,6 +3605,7 @@ async function boot() {
     book = await loadBookById(bookId);
     renderAll();
     bind();
+    switchTab('shelf');
     if (syncReady() && settings.autoSync) setTimeout(() => syncNow(true), 2000);
     setTimeout(() => {
       if (storeMode === 'mem') {
